@@ -1,0 +1,43 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: trip-service-dev
+
+resources:
+- ../../base
+- namespace.yaml
+- ingress.yaml
+# 정적 시크릿 (dev 환경은 Secrets Manager 미사용)
+- ../../base/secrets.yaml
+# Pod 기반 DB (dev 환경은 관리형 서비스 미사용)
+- ../../base/mysql/
+- ../../base/mongodb/
+- ../../base/redis/
+
+patchesStrategicMerge:
+- configmap.yaml
+- ingress-patch.yaml
+
+images:
+- name: trip-service/service-currency
+  newTag: dev-latest
+- name: trip-service/service-history
+  newTag: dev-latest
+- name: trip-service/service-ranking
+  newTag: dev-latest
+- name: trip-service/service-dataingestor
+  newTag: dev-latest
+- name: trip-service/frontend
+  newTag: dev-latest
+
+replicas:
+- name: service-currency
+  count: 1
+- name: service-history
+  count: 1
+- name: service-ranking
+  count: 1
+- name: service-dataingestor
+  count: 1
+- name: service-frontend
+  count: 1

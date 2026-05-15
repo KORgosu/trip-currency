@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trip-service-config
+data:
+  # Database Configuration
+  MYSQL_HOST: "service-mysql"
+  MYSQL_PORT: "3306"
+  MYSQL_DATABASE: "currency_db"
+  MYSQL_USER: "trip_user"
+
+  # MongoDB Configuration
+  MONGODB_HOST: "service-mongodb"
+  MONGODB_PORT: "27017"
+  MONGODB_DATABASE: "currency_db"
+  MONGODB_USER: "trip_user"
+
+  # Redis Configuration
+  REDIS_HOST: "service-redis"
+  REDIS_PORT: "6379"
+
+  # Kafka Configuration
+  KAFKA_BOOTSTRAP_SERVERS: "service-kafka:9092"
+
+  # Service URLs (각 서비스의 실제 포트에 맞게 수정)
+  CURRENCY_SERVICE_URL: "http://service-currency:8000"
+  HISTORY_SERVICE_URL: "http://service-history:8000"
+  RANKING_SERVICE_URL: "http://service-ranking:8000"
+  DATAINGESTOR_SERVICE_URL: "http://service-dataingestor:8000"
+
+  # 환경 변수로 포트 정보 제공
+  PORT: "8000"  # 기본 포트 (각 서비스에서 오버라이드 가능)

@@ -1,0 +1,54 @@
+# Trip Currency Shared Package v1.0.0
+# 패키지에 포함할 파일들을 지정
+
+# README 파일 포함
+include README.md
+
+# 라이선스 파일 포함
+include LICENSE
+
+# requirements 파일 포함
+include requirements.txt
+
+# Python 소스 파일들 포함
+recursive-include shared *.py
+
+# 설정 파일들 포함
+include pyproject.toml
+include setup.py
+
+# 문서 파일들 포함
+recursive-include docs *.md *.rst *.txt
+
+# 테스트 파일들 포함 (선택사항)
+recursive-include tests *.py
+
+# 예제 파일들 포함 (선택사항)
+recursive-include examples *.py *.md
+
+# 기타 중요한 파일들
+include *.md
+include *.txt
+
+# 제외할 파일들
+exclude *.pyc
+exclude *.pyo
+exclude *.pyd
+exclude __pycache__
+recursive-exclude * __pycache__
+recursive-exclude * *.py[co]
+recursive-exclude * *.so
+recursive-exclude * .DS_Store
+recursive-exclude * .git*
+recursive-exclude * .vscode
+recursive-exclude * .idea
+recursive-exclude * *.egg-info
+recursive-exclude * dist
+recursive-exclude * build
+recursive-exclude * .pytest_cache
+recursive-exclude * .coverage
+recursive-exclude * htmlcov
+recursive-exclude * .tox
+recursive-exclude * .venv
+recursive-exclude * venv
+recursive-exclude * env

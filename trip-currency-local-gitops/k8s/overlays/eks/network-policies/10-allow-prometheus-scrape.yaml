@@ -1,0 +1,22 @@
+# monitoring 네임스페이스의 Prometheus가 trip-service-prod 파드를 스크래핑할 수 있도록 허용
+# 대상: prometheus.io/scrape=true 어노테이션이 붙은 파드의 포트 8000
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-prometheus-scrape
+  namespace: trip-service-prod
+spec:
+  podSelector:
+    matchLabels: {}
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: monitoring
+    ports:
+    - protocol: TCP
+      port: 8000
+    - protocol: TCP
+      port: 80

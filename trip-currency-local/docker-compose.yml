@@ -1,0 +1,281 @@
+# 로컬 개발 환경용 Docker Compose
+# MySQL, Redis, Kafka를 사용한 로컬 개발 환경
+# --- [공통 환경 변수 템플릿] ---
+x-common-env: &common-env
+  ENVIRONMENT: local
+  DB_HOST: mysql
+  DB_PORT: 3306
+  DB_NAME: currency_db
+  DB_USER: currency_user
+  DB_PASSWORD: password
+  REDIS_HOST: redis
+  REDIS_PORT: 6379
+  MONGODB_HOST: mongodb
+  MONGODB_PORT: 27017
+  MONGODB_USER: admin
+  MONGODB_PASSWORD: password
+  MONGODB_DATABASE: currency_db
+  KAFKA_BOOTSTRAP_SERVERS: kafka:9093
+  # AWS 관련 설정은 실제 AWS 서비스 사용 시 추가
+
+services:
+  mysql:
+    image: mysql:8.4.5
+    container_name: currency-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: currency_db
+      MYSQL_USER: currency_user
+      MYSQL_PASSWORD: password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    networks:
+      - currency-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-ppassword"]
+      timeout: 20s
+      retries: 5
+      interval: 10s
+      start_period: 150s
+
+  redis:
+    image: redis:7-alpine
+    container_name: currency-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - currency-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      timeout: 10s
+      retries: 5
+      interval: 10s
+      start_period: 20s
+
+  mongodb:
+    image: mongo:7.0
+    container_name: currency-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - ./scripts/init-mongodb.js:/docker-entrypoint-initdb.d/init-mongodb.js:ro
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_DATABASE: currency_db
+    networks:
+      - currency-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      timeout: 10s
+      retries: 5
+      interval: 10s
+      start_period: 30s
+
+  zookeeper:
+    image: bitnami/zookeeper:3.8
+    ports:
+      - "2181:2181"
+    volumes:
+      - zookeeper_data:/bitnami/zookeeper
+    environment:
+      - ALLOW_ANONYMOUS_LOGIN=yes
+    networks:
+      - currency-network
+
+  kafka:
+    image: bitnami/kafka:3.4
+    ports:
+      - "9092:9092"
+    volumes:
+      - kafka_data:/bitnami/kafka
+    environment:
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      - KAFKA_CFG_LISTENERS=INTERNAL://:9093,EXTERNAL://:9092
+      - KAFKA_CFG_ADVERTISED_LISTENERS=INTERNAL://kafka:9093,EXTERNAL://localhost:9092
+      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=INTERNAL
+      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
+      - ALLOW_PLAINTEXT_LISTENER=yes
+    depends_on:
+      - zookeeper
+    networks:
+      - currency-network
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: currency-kafka-ui
+    depends_on:
+      - kafka
+    ports:
+      - "8081:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local-kafka
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9093
+      DYNAMIC_CONFIG_ENABLED: 'true'
+    networks:
+      - currency-network
+
+  # Kafka 토픽 초기화 서비스
+  kafka-init:
+    image: bitnami/kafka:3.4
+    container_name: currency-kafka-init
+    depends_on:
+      kafka:
+        condition: service_started
+    volumes:
+      - ./scripts/init-kafka-topics.sh:/init-kafka-topics.sh:ro
+    command: |
+      sh -c "
+        echo '⏳ Kafka 초기화 대기 중...' &&
+        sleep 30 &&
+        echo '🚀 Kafka 토픽 초기화 시작...' &&
+        chmod +x /init-kafka-topics.sh &&
+        /init-kafka-topics.sh &&
+        echo '✅ Kafka 토픽 초기화 완료!' &&
+        tail -f /dev/null
+      "
+    networks:
+      - currency-network
+
+  service-currency:
+    build:
+      context: .
+      dockerfile: ./service-currency/Dockerfile
+    container_name: service-currency
+    command: sh -c "echo 'Currency Service is waiting for 30 seconds before starting...' && sleep 30 && python service-currency/main.py"
+    ports:
+      - "8001:8000"
+    environment:
+      <<: *common-env
+      SERVICE_NAME: service-currency
+      PORT: "8000"
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      kafka: { condition: service_started }
+    networks:
+      - currency-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 160s
+
+  # Ranking Service
+  service-ranking:
+    build:
+      context: .
+      dockerfile: ./service-ranking/Dockerfile
+    container_name: service-ranking
+    command: sh -c "echo 'Ranking Service is waiting for 30 seconds before starting...' && sleep 30 && python service-ranking/main.py"
+    ports:
+      - "8002:8000"
+    environment:
+      <<: *common-env
+      SERVICE_NAME: service-ranking
+      PORT: "8000"
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      kafka: { condition: service_started }
+    networks:
+      - currency-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 160s
+
+  # History Service
+  service-history:
+    build:
+      context: .
+      dockerfile: ./service-history/Dockerfile
+    container_name: service-history
+    command: sh -c "echo 'History Service is waiting for 30 seconds before starting...' && sleep 30 && python service-history/main.py"
+    ports:
+      - "8003:8000"
+    environment:
+      <<: *common-env
+      SERVICE_NAME: service-history
+      PORT: "8000"
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      kafka: { condition: service_started }
+    networks:
+      - currency-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 160s
+
+  # Data Ingestor Service
+  service-dataingestor:
+    build:
+      context: .
+      dockerfile: ./service-dataingestor/Dockerfile
+    container_name: service-dataingestor
+    command: sh -c "echo 'Data Ingestor is waiting for 30 seconds before starting...' && sleep 30 && python service-dataingestor/main.py"
+    environment:
+      <<: *common-env
+      SERVICE_NAME: service-dataingestor
+      EXECUTION_MODE: scheduler
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      kafka: { condition: service_started }
+    networks:
+      - currency-network
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "python.*main.py"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 160s
+
+  # Frontend Service (React + Vite)
+  service-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: service-frontend
+    ports:
+      - "3000:80"
+    environment:
+      VITE_API_BASE_URL: http://service-currency:8000
+      VITE_RANKING_API_BASE_URL: http://service-ranking:8000
+      VITE_HISTORY_API_BASE_URL: http://service-history:8000
+      VITE_NODE_ENV: production
+      VITE_APP_TITLE: Trip Currency Service
+      VITE_APP_VERSION: 1.0.0
+    networks:
+      - currency-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  mysql_data:
+  redis_data:
+  mongodb_data:
+  zookeeper_data:
+  kafka_data:
+
+networks:
+  currency-network:
+    driver: bridge

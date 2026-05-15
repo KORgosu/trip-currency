@@ -1,0 +1,26 @@
+# zookeeper:
+#   Ingress: kafka, kafka-ui 에서만 2181 허용
+#   Egress:  없음 (내부 조정 역할만 수행)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-zookeeper
+  namespace: trip-service-prod
+spec:
+  podSelector:
+    matchLabels:
+      app: zookeeper
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: kafka
+    - podSelector:
+        matchLabels:
+          app: kafka-ui
+    ports:
+    - protocol: TCP
+      port: 2181

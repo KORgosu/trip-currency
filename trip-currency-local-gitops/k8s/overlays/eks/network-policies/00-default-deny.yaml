@@ -1,0 +1,11 @@
+# 네임스페이스 내 모든 Pod의 Ingress/Egress를 기본 차단
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: trip-service-prod
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress

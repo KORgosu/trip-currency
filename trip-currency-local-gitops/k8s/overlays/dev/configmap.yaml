@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trip-service-config
+data:
+  # 개발 환경 설정
+  ENVIRONMENT: "dev"
+  LOG_LEVEL: "DEBUG"
+  DEBUG: "true"
+  
+  # API 설정
+  API_BASE_URL: "http://api-dev.trip-service.local"
+  
+  # 데이터베이스 설정 (개발 환경) - 간단한 서비스 이름 사용
+  MYSQL_HOST: "service-mysql"
+  MYSQL_PORT: "3306"
+  MYSQL_DATABASE: "currency_db"
+  MYSQL_USER: "trip_user"
+  
+  MONGODB_HOST: "service-mongodb"
+  MONGODB_PORT: "27017"
+  MONGODB_DATABASE: "currency_db"
+  MONGODB_USER: "trip_user"
+  
+  REDIS_HOST: "service-redis"
+  REDIS_PORT: "6379"
+  REDIS_DB: "0"
+  
+  # Kafka 설정
+  KAFKA_BOOTSTRAP_SERVERS: "service-kafka:9092"
+  KAFKA_TOPIC_PREFIX: "dev-"
+  
+  # 서비스 설정
+  CURRENCY_SERVICE_URL: "http://service-currency:8000"
+  HISTORY_SERVICE_URL: "http://service-history:8000"
+  RANKING_SERVICE_URL: "http://service-ranking:8000"
+  DATAINGESTOR_SERVICE_URL: "http://service-dataingestor:8000"
+  
+  # 개발 환경 전용 설정
+  MOCK_DATA_ENABLED: "true"
+  CACHE_TTL: "300"  # 5분 (개발 환경에서는 짧게)
+  RATE_LIMIT_ENABLED: "false"
+  
+  # 로깅 설정
+  LOG_FORMAT: "json"
+  LOG_OUTPUT: "stdout"
+  
+  # 메트릭 설정
+  METRICS_ENABLED: "true"
+  METRICS_PORT: "9090"

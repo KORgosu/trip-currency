@@ -1,0 +1,23 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+# Infrastructure
+- configmap.yaml
+# secrets.yaml는 각 overlay에서 환경별로 포함
+# EKS overlay: External Secrets Operator로 AWS Secrets Manager에서 주입
+# dev/prod overlay: base/secrets.yaml 직접 포함
+
+# Message Queue
+- kafka/
+
+# Application Services
+- services/currency-service/
+- services/history-service/
+- services/ranking-service/
+- services/dataingestor-service/
+- services/frontend/
+
+# Databases - 각 overlay에서 환경별로 포함 여부 결정
+# EKS overlay: 관리형 서비스 사용 (Aurora, ElastiCache, DocumentDB) → 미포함
+# dev/prod overlay: Pod 기반 DB 사용 → overlay에서 직접 포함

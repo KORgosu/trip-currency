@@ -1,0 +1,24 @@
+apiVersion: 1
+
+datasources:
+  # Thanos Query (멀티 클러스터 통합)
+  - name: Thanos
+    type: prometheus
+    access: proxy
+    url: http://thanos-query:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      timeInterval: 30s
+      httpMethod: POST
+
+  # 로컬 Prometheus (직접 접근 - 백업용)
+  - name: Prometheus (Local)
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: false
+    editable: false
+    jsonData:
+      timeInterval: 15s
+

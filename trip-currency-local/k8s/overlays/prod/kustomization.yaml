@@ -1,0 +1,145 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: trip-service-prod
+
+resources:
+- ../../base
+- ingress.yaml
+
+patches:
+# 이미지 및 imagePullPolicy 패치
+- target:
+    kind: Deployment
+    name: service-frontend
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/image
+      value: korgosu/service-frontend:latest
+    - op: replace
+      path: /spec/template/spec/containers/0/imagePullPolicy
+      value: Always
+- target:
+    kind: Deployment
+    name: service-currency
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/image
+      value: korgosu/service-currency:latest
+    - op: replace
+      path: /spec/template/spec/containers/0/imagePullPolicy
+      value: Always
+- target:
+    kind: Deployment
+    name: service-history
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/image
+      value: korgosu/service-history:latest
+    - op: replace
+      path: /spec/template/spec/containers/0/imagePullPolicy
+      value: Always
+- target:
+    kind: Deployment
+    name: service-ranking
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/image
+      value: korgosu/service-ranking:latest
+    - op: replace
+      path: /spec/template/spec/containers/0/imagePullPolicy
+      value: Always
+- target:
+    kind: CronJob
+    name: service-dataingestor-cronjob
+  patch: |-
+    - op: replace
+      path: /spec/jobTemplate/spec/template/spec/containers/0/image
+      value: korgosu/service-dataingestor:latest
+    - op: replace
+      path: /spec/jobTemplate/spec/template/spec/containers/0/imagePullPolicy
+      value: Always
+# 프로덕션 리소스 제한 및 레플리카 설정
+- target:
+    kind: Deployment
+    name: service-frontend
+  patch: |-
+    - op: replace
+      path: /spec/replicas
+      value: 3
+    - op: replace
+      path: /spec/template/spec/containers/0/resources
+      value:
+        requests:
+          memory: "256Mi"
+          cpu: "100m"
+        limits:
+          memory: "512Mi"
+          cpu: "500m"
+- target:
+    kind: Deployment
+    name: service-currency
+  patch: |-
+    - op: replace
+      path: /spec/replicas
+      value: 3
+    - op: replace
+      path: /spec/template/spec/containers/0/resources
+      value:
+        requests:
+          memory: "256Mi"
+          cpu: "100m"
+        limits:
+          memory: "512Mi"
+          cpu: "500m"
+- target:
+    kind: Deployment
+    name: service-history
+  patch: |-
+    - op: replace
+      path: /spec/replicas
+      value: 3
+    - op: replace
+      path: /spec/template/spec/containers/0/resources
+      value:
+        requests:
+          memory: "256Mi"
+          cpu: "100m"
+        limits:
+          memory: "512Mi"
+          cpu: "500m"
+- target:
+    kind: Deployment
+    name: service-ranking
+  patch: |-
+    - op: replace
+      path: /spec/replicas
+      value: 3
+    - op: replace
+      path: /spec/template/spec/containers/0/resources
+      value:
+        requests:
+          memory: "256Mi"
+          cpu: "100m"
+        limits:
+          memory: "512Mi"
+          cpu: "500m"
+
+# 프로덕션 환경 설정 패치
+- target:
+    kind: ConfigMap
+    name: trip-service-config
+  patch: |-
+    - op: add
+      path: /data/ENVIRONMENT
+      value: "prod"
+    - op: add
+      path: /data/LOG_LEVEL
+      value: "info"
+    - op: add
+      path: /data/API_BASE_URL
+      value: "https://api.trip-service.com"
+    - op: add
+      path: /data/HISTORY_API_URL
+      value: "https://history.trip-service.com"
+

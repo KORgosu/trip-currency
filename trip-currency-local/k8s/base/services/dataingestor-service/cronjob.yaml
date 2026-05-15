@@ -1,0 +1,86 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: service-dataingestor-cronjob
+  labels:
+    app: service-dataingestor
+spec:
+  # 5분마다 실행 (*/5 * * * *)
+  schedule: "*/5 * * * *"
+
+  # 동시 실행 정책: 이전 Job이 완료되지 않으면 새 Job 실행 안 함
+  concurrencyPolicy: Forbid
+
+  # 성공한 Job 히스토리 보관 개수
+  successfulJobsHistoryLimit: 3
+
+  # 실패한 Job 히스토리 보관 개수
+  failedJobsHistoryLimit: 3
+
+  jobTemplate:
+    spec:
+      # Job 재시도 횟수
+      backoffLimit: 2
+
+      # Job 완료 대기 시간
+      activeDeadlineSeconds: 600
+
+      template:
+        metadata:
+          labels:
+            app: service-dataingestor
+            job-type: data-collection
+          annotations:
+            prometheus.io/scrape: "true"
+            prometheus.io/port: "8000"
+            prometheus.io/path: "/metrics"
+        spec:
+          restartPolicy: OnFailure
+
+          containers:
+          - name: service-dataingestor
+            image: korgosu/service-dataingestor:latest
+            imagePullPolicy: Always
+
+            # single 모드로 실행 (한 번만 실행하고 종료)
+            command: ["python", "main.py"]
+            args: ["single"]
+
+            envFrom:
+            - configMapRef:
+                name: trip-service-config
+            - secretRef:
+                name: trip-service-secrets
+
+            env:
+            - name: EXECUTION_MODE
+              value: "single"
+            - name: JOB_TYPE
+              value: "data-collection"
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: trip-service-secrets
+                  key: mysql-password
+            - name: MONGODB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: trip-service-secrets
+                  key: mongodb-password
+
+            resources:
+              requests:
+                memory: "512Mi"
+                cpu: "200m"
+              limits:
+                memory: "1Gi"
+                cpu: "1000m"
+
+            # 로그 볼륨 마운트 (선택사항)
+            volumeMounts:
+            - name: logs
+              mountPath: /app/logs
+
+          volumes:
+          - name: logs
+            emptyDir: {}

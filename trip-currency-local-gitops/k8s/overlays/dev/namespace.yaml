@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: trip-service-dev
+  labels:
+    name: trip-service-dev
+    environment: dev
+    team: backend
+    project: trip-service
+  annotations:
+    description: "Trip Service 개발 환경 네임스페이스"
+    created-by: "kustomize"
+    version: "1.0.0"

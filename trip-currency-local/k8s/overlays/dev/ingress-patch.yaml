@@ -1,0 +1,52 @@
+# 개발 환경용 Ingress 설정
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: trip-service-main-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"  # 개발환경에서는 HTTP 허용
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: dev.trip-service.local        # 개발 환경 도메인
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend-service
+            port:
+              number: 80
+
+  - host: api-dev.trip-service.local    # 개발 API 도메인
+    http:
+      paths:
+      - path: /currency
+        pathType: Prefix
+        backend:
+          service:
+            name: currency-service
+            port:
+              number: 8000
+      - path: /history
+        pathType: Prefix
+        backend:
+          service:
+            name: history-service
+            port:
+              number: 8000
+      - path: /ranking
+        pathType: Prefix
+        backend:
+          service:
+            name: ranking-service
+            port:
+              number: 8000
+      - path: /dataingestor
+        pathType: Prefix
+        backend:
+          service:
+            name: dataingestor-service
+            port:
+              number: 8000

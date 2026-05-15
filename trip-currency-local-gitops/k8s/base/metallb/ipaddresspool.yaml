@@ -1,0 +1,30 @@
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: trip-service-pool
+  namespace: metallb-system
+spec:
+  addresses:
+  # 👇 현재 네트워크에 맞게 설정 (192.168.0.0/24 대역)
+  # Wi-Fi IPv4 주소: 192.168.0.34
+  # Docker Desktop - 설정 - Resources - Network - Docker Subnet 192.168.0.0/24
+  - 192.168.0.100-192.168.0.110  # 10개 IP 할당
+  # 0.100-110 대역은 일반적으로 DHCP가 사용하지 않는 범위
+
+  # 대안 1: 단일 IP
+  # - 192.168.0.100/32
+
+  # 대안 2: CIDR 범위
+  # - 192.168.0.100/29  # 192.168.0.100-107 (8개 IP)
+
+  # 주의: 이 IP들은 다른 장치에서 사용하지 않는 범위여야 함
+---
+apiVersion: metallb.io/v1beta1
+kind: L2Advertisement
+metadata:
+  name: trip-service-l2
+  namespace: metallb-system
+spec:
+  ipAddressPools:
+  - trip-service-pool
+  # L2 모드: 같은 네트워크 세그먼트에서 ARP로 IP 광고

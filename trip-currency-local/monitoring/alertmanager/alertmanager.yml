@@ -1,0 +1,43 @@
+# Alertmanager 설정
+global:
+  smtp_smarthost: 'localhost:587'
+  smtp_from: 'alertmanager@trip-service.local'
+
+route:
+  group_by: ['alertname']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 1h
+  receiver: 'web.hook'
+
+receivers:
+  - name: 'web.hook'
+    webhook_configs:
+      - url: 'http://127.0.0.1:5001/'
+        send_resolved: true
+
+  # 이메일 알림 (선택사항)
+  # - name: 'email-notifications'
+  #   email_configs:
+  #     - to: 'admin@trip-service.com'
+  #       subject: 'Alert: {{ .GroupLabels.alertname }}'
+  #       body: |
+  #         {{ range .Alerts }}
+  #         Alert: {{ .Annotations.summary }}
+  #         Description: {{ .Annotations.description }}
+  #         {{ end }}
+
+  # 슬랙 알림 (선택사항)
+  # - name: 'slack-notifications'
+  #   slack_configs:
+  #     - api_url: 'YOUR_SLACK_WEBHOOK_URL'
+  #       channel: '#alerts'
+  #       title: 'Alert: {{ .GroupLabels.alertname }}'
+  #       text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+
+inhibit_rules:
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'dev', 'instance']

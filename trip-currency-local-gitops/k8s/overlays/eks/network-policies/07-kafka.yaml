@@ -1,0 +1,43 @@
+# kafka:
+#   Ingress: 백엔드 서비스 및 dataingestor에서 9092
+#   Egress:  Zookeeper(2181) → pod selector
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-kafka
+  namespace: trip-service-prod
+spec:
+  podSelector:
+    matchLabels:
+      app: kafka
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: service-currency
+    - podSelector:
+        matchLabels:
+          app: service-history
+    - podSelector:
+        matchLabels:
+          app: service-ranking
+    - podSelector:
+        matchLabels:
+          app: service-dataingestor
+    - podSelector:
+        matchLabels:
+          app: kafka-ui
+    ports:
+    - protocol: TCP
+      port: 9092
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: zookeeper
+    ports:
+    - protocol: TCP
+      port: 2181

@@ -1,0 +1,143 @@
+# Prometheus 설정 파일
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+# 룰 파일 (알람 설정)
+rule_files:
+  - "alert_rules.yml"
+
+# 스크래핑 설정
+scrape_configs:
+  # Prometheus 자체 모니터링
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Kubernetes API Server (원격 클러스터)
+  - job_name: 'kubernetes-apiservers'
+    kubernetes_sd_configs:
+      - api_server: 'https://192.168.200.247:6443'
+        role: endpoints
+        # kubeconfig 파일 경로 또는 서비스 어카운트 토큰 사용
+        bearer_token_file: '/etc/prometheus/k8s-token'
+        tls_config:
+          ca_file: '/etc/prometheus/k8s-ca.crt'
+          insecure_skip_verify: true
+    scheme: https
+    tls_config:
+      ca_file: '/etc/prometheus/k8s-ca.crt'
+      insecure_skip_verify: true
+    bearer_token_file: '/etc/prometheus/k8s-token'
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+        action: keep
+        regex: default;kubernetes;https
+
+  # Kubernetes Nodes
+  - job_name: 'kubernetes-nodes'
+    kubernetes_sd_configs:
+      - api_server: 'https://192.168.200.247:6443'
+        role: node
+        bearer_token_file: '/etc/prometheus/k8s-token'
+        tls_config:
+          ca_file: '/etc/prometheus/k8s-ca.crt'
+          insecure_skip_verify: true
+    scheme: https
+    tls_config:
+      ca_file: '/etc/prometheus/k8s-ca.crt'
+      insecure_skip_verify: true
+    bearer_token_file: '/etc/prometheus/k8s-token'
+    relabel_configs:
+      - action: labelmap
+        regex: __meta_kubernetes_node_label_(.+)
+      - target_label: __address__
+        replacement: '192.168.200.247:6443'
+      - source_labels: [__meta_kubernetes_node_name]
+        regex: (.+)
+        target_label: __metrics_path__
+        replacement: /api/v1/nodes/${1}/proxy/metrics
+
+  # Kubernetes Pods
+  - job_name: 'kubernetes-pods'
+    kubernetes_sd_configs:
+      - api_server: 'https://192.168.200.247:6443'
+        role: pod
+        bearer_token_file: '/etc/prometheus/k8s-token'
+        tls_config:
+          ca_file: '/etc/prometheus/k8s-ca.crt'
+          insecure_skip_verify: true
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+        action: keep
+        regex: true
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+        action: replace
+        target_label: __metrics_path__
+        regex: (.+)
+      - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+        action: replace
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
+        target_label: __address__
+      - action: labelmap
+        regex: __meta_kubernetes_pod_label_(.+)
+      - source_labels: [__meta_kubernetes_namespace]
+        action: replace
+        target_label: kubernetes_namespace
+      - source_labels: [__meta_kubernetes_pod_name]
+        action: replace
+        target_label: kubernetes_pod_name
+
+  # Trip Service NodePort 모니터링 (외부 접근)
+  - job_name: 'trip-service-nodeport'
+    static_configs:
+      - targets:
+          - '192.168.200.247:30001'  # service-currency
+          - '192.168.200.247:30002'  # service-ranking
+          - '192.168.200.247:30003'  # service-history
+    metrics_path: /metrics
+    scrape_interval: 15s
+
+  # 서비스 모니터링 (trip-service 관련) - CronJob용
+  - job_name: 'trip-service-cronjobs'
+    kubernetes_sd_configs:
+      - api_server: 'https://192.168.200.247:6443'
+        role: pod
+        bearer_token_file: '/etc/prometheus/k8s-token'
+        tls_config:
+          ca_file: '/etc/prometheus/k8s-ca.crt'
+          insecure_skip_verify: true
+    relabel_configs:
+      # 네임스페이스 필터링
+      - source_labels: [__meta_kubernetes_namespace]
+        action: keep
+        regex: trip-service-prod
+      # DataIngestor CronJob만 대상
+      - source_labels: [__meta_kubernetes_pod_label_app]
+        action: keep
+        regex: service-dataingestor
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+        action: replace
+        target_label: __metrics_path__
+        regex: (.+)
+      - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+        action: replace
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
+        target_label: __address__
+      - action: labelmap
+        regex: __meta_kubernetes_pod_label_(.+)
+      - source_labels: [__meta_kubernetes_namespace]
+        action: replace
+        target_label: kubernetes_namespace
+      - source_labels: [__meta_kubernetes_pod_name]
+        action: replace
+        target_label: kubernetes_pod_name
+
+# Alertmanager 설정 (선택사항)
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093

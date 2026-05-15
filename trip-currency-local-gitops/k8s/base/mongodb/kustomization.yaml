@@ -1,0 +1,9 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- statefulset.yaml  # Deployment에서 StatefulSet으로 변경 (데이터 영구 저장)
+- service.yaml      # Headless Service (clusterIP: None)
+- configmap.yaml
+# 참고: PVC는 StatefulSet의 volumeClaimTemplates로 자동 생성됨
+# 기존 deployment.yaml과 pvc.yaml은 StatefulSet으로 마이그레이션되며 제거됨

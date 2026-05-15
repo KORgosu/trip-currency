@@ -1,0 +1,34 @@
+# service-dataingestor (CronJob):
+#   Ingress: 없음 (수신하는 서비스 없음)
+#   Egress:  Kafka(9092) → 수집 데이터 발행
+#            외부 HTTPS(443) → 환율 오픈 API 수집
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dataingestor
+  namespace: trip-service-prod
+spec:
+  podSelector:
+    matchLabels:
+      app: service-dataingestor
+  policyTypes:
+  - Ingress
+  - Egress
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: kafka
+    ports:
+    - protocol: TCP
+      port: 9092
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+        except:
+        - 192.168.0.0/16
+        - 10.0.0.0/8
+        - 172.16.0.0/12
+    ports:
+    - protocol: TCP
+      port: 443

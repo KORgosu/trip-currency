@@ -1,0 +1,15 @@
+# 데이터베이스 초기화용 Dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# 필요한 패키지 설치
+RUN pip install boto3 kafka-python
+
+# 스크립트 복사
+COPY scripts/init_local_db.py /scripts/init_local_db.py
+
+# 실행 권한 부여
+RUN chmod +x /scripts/init_local_db.py
+
+CMD ["python", "/scripts/init_local_db.py"]

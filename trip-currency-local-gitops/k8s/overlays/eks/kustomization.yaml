@@ -1,0 +1,113 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: trip-service-prod
+
+resources:
+- ../../base
+- namespace.yaml
+- ingress.yaml
+- storageclass.yaml
+- external-secrets/
+
+patches:
+- target:
+    kind: Deployment
+    name: service-frontend
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/image
+      value: 716773066105.dkr.ecr.ap-northeast-2.amazonaws.com/service-frontend:latest
+    - op: replace
+      path: /spec/template/spec/containers/0/imagePullPolicy
+      value: Always
+
+- target:
+    kind: Deployment
+    name: service-currency
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/image
+      value: 716773066105.dkr.ecr.ap-northeast-2.amazonaws.com/service-currency:latest
+    - op: replace
+      path: /spec/template/spec/containers/0/imagePullPolicy
+      value: Always
+
+- target:
+    kind: Deployment
+    name: service-history
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/image
+      value: 716773066105.dkr.ecr.ap-northeast-2.amazonaws.com/service-history:latest
+    - op: replace
+      path: /spec/template/spec/containers/0/imagePullPolicy
+      value: Always
+
+- target:
+    kind: Deployment
+    name: service-ranking
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/image
+      value: 716773066105.dkr.ecr.ap-northeast-2.amazonaws.com/service-ranking:latest
+    - op: replace
+      path: /spec/template/spec/containers/0/imagePullPolicy
+      value: Always
+
+- target:
+    kind: CronJob
+    name: service-dataingestor-cronjob
+  patch: |-
+    - op: replace
+      path: /spec/jobTemplate/spec/template/spec/containers/0/image
+      value: 716773066105.dkr.ecr.ap-northeast-2.amazonaws.com/service-dataingestor:latest
+    - op: replace
+      path: /spec/jobTemplate/spec/template/spec/containers/0/imagePullPolicy
+      value: Always
+
+- target:
+    kind: ConfigMap
+    name: trip-service-config
+  patch: |-
+    - op: replace
+      path: /data/MYSQL_HOST
+      value: "trip-aurora-cluster.cluster-cxiuq4kag9i2.ap-northeast-2.rds.amazonaws.com"
+    - op: replace
+      path: /data/MYSQL_USER
+      value: "trip_admin"
+    - op: replace
+      path: /data/MONGODB_HOST
+      value: "trip-docdb-cluster.cluster-cxiuq4kag9i2.ap-northeast-2.docdb.amazonaws.com"
+    - op: replace
+      path: /data/MONGODB_USER
+      value: "trip_admin"
+    - op: replace
+      path: /data/REDIS_HOST
+      value: "trip-redis-cluster.84xmxv.0001.apn2.cache.amazonaws.com"
+    - op: add
+      path: /data/ENVIRONMENT
+      value: "prod"
+    - op: add
+      path: /data/CLOUD_PROVIDER
+      value: "aws"
+    - op: add
+      path: /data/REGION
+      value: "ap-northeast-2"
+
+- target:
+    kind: Deployment
+    name: service-frontend
+  patch: |-
+    - op: replace
+      path: /spec/replicas
+      value: 3
+    - op: replace
+      path: /spec/template/spec/containers/0/resources
+      value:
+        requests:
+          memory: "32Mi"
+          cpu: "50m"
+        limits:
+          memory: "64Mi"
+          cpu: "200m"

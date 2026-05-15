@@ -1,0 +1,185 @@
+version: '3.8'
+
+networks:
+  monitoring:
+    driver: bridge
+
+volumes:
+  prometheus_data:
+  grafana_data:
+  minio_data:
+
+services:
+  # Prometheus 서비스
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus:/etc/prometheus
+      - prometheus_data:/prometheus
+      # 쿠버네티스 인증 파일들
+      - ./k8s-ca.crt:/etc/prometheus/k8s-ca.crt:ro
+      - ./k8s-token:/etc/prometheus/k8s-token:ro
+    networks:
+      - monitoring
+    labels:
+      org.label-schema.group: "monitoring"
+
+  # Grafana 서비스
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource,grafana-piechart-panel
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
+    networks:
+      - monitoring
+    labels:
+      org.label-schema.group: "monitoring"
+    depends_on:
+      - prometheus
+
+  # Node Exporter (현재 PC 모니터링용)
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    restart: unless-stopped
+    ports:
+      - "9100:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    networks:
+      - monitoring
+    labels:
+      org.label-schema.group: "monitoring"
+
+  # cAdvisor (컨테이너 모니터링용)
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    privileged: true
+    devices:
+      - /dev/kmsg:/dev/kmsg
+    networks:
+      - monitoring
+    labels:
+      org.label-schema.group: "monitoring"
+
+  # Alertmanager (알람 관리용 - 선택사항)
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: alertmanager
+    restart: unless-stopped
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./alertmanager:/etc/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+      - '--web.external-url=http://localhost:9093'
+    networks:
+      - monitoring
+    labels:
+      org.label-schema.group: "monitoring"
+
+  # MinIO (S3 호환 Object Storage - Thanos용)
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    command: server /data --console-address ":9001"
+    restart: unless-stopped
+    ports:
+      - "9000:9000"  # S3 API
+      - "9001:9001"  # Web Console
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: password123
+    volumes:
+      - minio_data:/data
+    networks:
+      - monitoring
+    labels:
+      org.label-schema.group: "monitoring"
+
+  # Thanos Query (멀티 클러스터 쿼리 통합)
+  thanos-query:
+    image: quay.io/thanos/thanos:v0.32.5
+    container_name: thanos-query
+    command:
+      - 'query'
+      - '--http-address=0.0.0.0:9090'
+      - '--grpc-address=0.0.0.0:10901'
+      - '--query.replica-label=replica'
+      # 로컬 클러스터 Thanos Sidecar (Kind의 NodePort로 접근)
+      - '--store=host.docker.internal:30901'
+      # EKS 클러스터 Thanos Sidecar (Ingress 또는 NLB로 접근)
+      # - '--store=<EKS_THANOS_SIDECAR_URL>:10901'
+    restart: unless-stopped
+    ports:
+      - "10902:9090"  # Thanos Query UI
+      - "10903:10901" # gRPC
+    networks:
+      - monitoring
+    labels:
+      org.label-schema.group: "monitoring"
+    depends_on:
+      - minio
+
+  # Thanos Store Gateway (장기 메트릭 조회용 - 선택사항)
+  thanos-store:
+    image: quay.io/thanos/thanos:v0.32.5
+    container_name: thanos-store
+    command:
+      - 'store'
+      - '--data-dir=/var/thanos/store'
+      - '--objstore.config-file=/etc/thanos/objstore.yml'
+      - '--http-address=0.0.0.0:10912'
+      - '--grpc-address=0.0.0.0:10901'
+    restart: unless-stopped
+    ports:
+      - "10912:10912"
+    volumes:
+      - ./thanos/objstore.yml:/etc/thanos/objstore.yml:ro
+    networks:
+      - monitoring
+    labels:
+      org.label-schema.group: "monitoring"
+    depends_on:
+      - minio

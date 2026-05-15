@@ -1,0 +1,30 @@
+# kafka-ui:
+#   Ingress: 차단 (외부/내부 모두) — 관리 도구, kubectl port-forward 로만 접근
+#   Egress:  Kafka(9092), Zookeeper(2181) → pod selector
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-kafka-ui
+  namespace: trip-service-prod
+spec:
+  podSelector:
+    matchLabels:
+      app: kafka-ui
+  policyTypes:
+  - Ingress
+  - Egress
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: kafka
+    ports:
+    - protocol: TCP
+      port: 9092
+  - to:
+    - podSelector:
+        matchLabels:
+          app: zookeeper
+    ports:
+    - protocol: TCP
+      port: 2181

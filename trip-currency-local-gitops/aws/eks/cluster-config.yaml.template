@@ -1,0 +1,60 @@
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: trip-service-cluster
+  region: ap-northeast-2
+  version: "1.33"
+  tags:
+    project: trip-service
+    environment: prod
+
+iam:
+  withOIDC: true  # IRSA 활성화 (AWS LB Controller, External Secrets Operator용)
+
+vpc:
+  id: "${VPC_ID}"
+  clusterEndpoints:
+    publicAccess: true
+    privateAccess: true
+  subnets:
+    public:
+      ap-northeast-2a:
+        id: "${SUBNET_PUBLIC_2A}"
+      ap-northeast-2b:
+        id: "${SUBNET_PUBLIC_2B}"
+      ap-northeast-2c:
+        id: "${SUBNET_PUBLIC_2C}"
+    private:
+      ap-northeast-2a:
+        id: "${SUBNET_PRIVATE_2A}"
+      ap-northeast-2b:
+        id: "${SUBNET_PRIVATE_2B}"
+      ap-northeast-2c:
+        id: "${SUBNET_PRIVATE_2C}"
+
+addons:
+  - name: vpc-cni
+    version: latest
+  - name: coredns
+    version: latest
+  - name: kube-proxy
+    version: latest
+  - name: aws-ebs-csi-driver
+    version: latest
+    wellKnownPolicies:
+      ebsCSIController: true  # gp3-encrypted StorageClass용
+
+managedNodeGroups:
+  - name: trip-service-workers
+    instanceType: t3.medium
+    minSize: 2
+    maxSize: 5
+    desiredCapacity: 3
+    privateNetworking: true  # 워커 노드는 프라이빗 서브넷에 배치
+    volumeSize: 30
+    volumeType: gp3
+    iam:
+      withAddonPolicies:
+        ebs: true
+        awsLoadBalancerController: true

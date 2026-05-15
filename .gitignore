@@ -1,0 +1,50 @@
+# ── trip-currency-local ──────────────────────────────────────────────────────
+trip-currency-local/node_modules/
+trip-currency-local/.env
+trip-currency-local/.env.local
+trip-currency-local/.env.*.local
+trip-currency-local/dist/
+trip-currency-local/build/
+trip-currency-local/.next/
+trip-currency-local/.nuxt/
+trip-currency-local/coverage/
+trip-currency-local/.cache/
+trip-currency-local/.parcel-cache/
+trip-currency-local/frontend/.vite/
+trip-currency-local/logs/
+trip-currency-local/*.log
+
+# ── trip-currency-local-gitops ────────────────────────────────────────────────
+# AWS 인프라 식별자 (template 버전 사용)
+trip-currency-local-gitops/aws/iam/ebs-csi-trust.json
+trip-currency-local-gitops/aws/eks/cluster-config.yaml
+
+# 일회성 AWS CLI 작업 파일
+trip-currency-local-gitops/aws/route53/
+trip-currency-local-gitops/aws/acm/
+
+# Grafana admin Secret 실제 파일
+trip-currency-local-gitops/k8s/overlays/eks/monitoring/grafana-admin-secret.yaml
+
+# 환경 변수 실제 파일
+trip-currency-local-gitops/.env.aws
+
+# ── trip-currency-local (monitoring 민감 파일) ────────────────────────────────
+trip-currency-local/monitoring/k8s-token
+trip-currency-local/monitoring/k8s-ca.crt
+trip-currency-local/monitoring/prometheus/k8s-token
+trip-currency-local/monitoring/prometheus/k8s-ca.crt
+trip-currency-local/monitoring/thanos/objstore.yml
+
+# ── 공통 ──────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+__pycache__/
+*.py[cod]
+.Python
+venv/
+env/
+*.egg-info/
+.claude/

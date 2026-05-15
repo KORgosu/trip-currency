@@ -1,0 +1,41 @@
+# service-ranking:
+#   Ingress: ALB(VPC CIDR)에서 8000 포트
+#   Egress:  Aurora(3306), DocumentDB(27017), Redis(6379) → VPC CIDR
+#            Kafka(9092) → pod selector
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ranking
+  namespace: trip-service-prod
+spec:
+  podSelector:
+    matchLabels:
+      app: service-ranking
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - ipBlock:
+        cidr: 192.168.0.0/16
+    ports:
+    - protocol: TCP
+      port: 8000
+  egress:
+  - to:
+    - ipBlock:
+        cidr: 192.168.0.0/16
+    ports:
+    - protocol: TCP
+      port: 3306
+    - protocol: TCP
+      port: 27017
+    - protocol: TCP
+      port: 6379
+  - to:
+    - podSelector:
+        matchLabels:
+          app: kafka
+    ports:
+    - protocol: TCP
+      port: 9092

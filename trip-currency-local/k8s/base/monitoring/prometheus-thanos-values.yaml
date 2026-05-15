@@ -1,0 +1,51 @@
+# Helm values for Prometheus with Thanos Sidecar
+# 사용법: helm install prometheus prometheus-community/kube-prometheus-stack -f prometheus-thanos-values.yaml -n monitoring
+
+prometheus:
+  prometheusSpec:
+    # Prometheus 리소스 설정
+    resources:
+      requests:
+        memory: 512Mi
+        cpu: 200m
+      limits:
+        memory: 2Gi
+        cpu: 1000m
+    
+    # 데이터 보존 기간 (Thanos로 장기 저장하므로 짧게)
+    retention: 2d
+    
+    # Thanos Sidecar 설정
+    thanos:
+      image: quay.io/thanos/thanos:v0.32.5
+      version: v0.32.5
+      
+      # Object Storage 설정
+      objectStorageConfig:
+        name: thanos-objstore-config
+        key: thanos.yaml
+      
+      # gRPC 포트 설정
+      grpcServerTlsConfig:
+        insecureSkipVerify: true
+
+    # ServiceMonitor 라벨링
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+
+# Grafana 비활성화 (로컬 Docker Compose에서 실행)
+grafana:
+  enabled: false
+
+# Alertmanager 비활성화 (로컬 Docker Compose에서 실행)
+alertmanager:
+  enabled: false
+
+# Node Exporter 활성화
+nodeExporter:
+  enabled: true
+
+# Kube State Metrics 활성화
+kubeStateMetrics:
+  enabled: true
+

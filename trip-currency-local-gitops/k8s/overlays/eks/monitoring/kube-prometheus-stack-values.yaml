@@ -1,0 +1,85 @@
+grafana:
+  admin:
+    existingSecret: grafana-admin-secret
+    userKey: admin-user
+    passwordKey: admin-password
+  persistence:
+    enabled: true
+    storageClassName: gp3-encrypted
+    size: 5Gi
+  # Loki 데이터소스 사전 설정 (Phase 3 이후 로그 조회 가능)
+  additionalDataSources:
+    - name: Loki
+      type: loki
+      url: http://loki.logging.svc.cluster.local:3100
+      access: proxy
+  grafana.ini:
+    server:
+      root_url: "%(protocol)s://%(domain)s/"
+    security:
+      allow_embedding: false
+
+prometheus:
+  prometheusSpec:
+    retention: 15d
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp3-encrypted
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 20Gi
+    # trip-service-prod 네임스페이스 파드 자동 스크래핑
+    podMonitorNamespaceSelector: {}
+    podMonitorSelector: {}
+    serviceMonitorNamespaceSelector: {}
+    serviceMonitorSelector: {}
+    # prometheus.io/scrape 어노테이션 기반 자동 수집
+    additionalScrapeConfigs:
+      - job_name: trip-service-pods
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - trip-service-prod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: "true"
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            target_label: app
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+
+alertmanager:
+  alertmanagerSpec:
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp3-encrypted
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 2Gi
+
+# metrics-server 대신 Prometheus Adapter로 HPA 메트릭 공급
+prometheusAdapter:
+  enabled: false  # 별도 설치 예정
+
+# 노드 메트릭 수집
+nodeExporter:
+  enabled: true
+
+# kube-state-metrics (Deployment/Pod 상태 메트릭)
+kubeStateMetrics:
+  enabled: true

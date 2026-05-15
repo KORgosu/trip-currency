@@ -1,0 +1,13 @@
+# 실제 AWS 인프라 식별자가 포함된 파일 (template 버전을 사용하세요)
+aws/iam/ebs-csi-trust.json
+aws/eks/cluster-config.yaml
+
+# 일회성 AWS CLI 작업 파일 (이미 적용 완료, 재사용 불필요)
+aws/route53/
+aws/acm/
+
+# Grafana admin Secret 실제 파일 (example 버전을 사용하세요)
+k8s/overlays/eks/monitoring/grafana-admin-secret.yaml
+
+# 환경 변수 실제 파일
+.env.aws

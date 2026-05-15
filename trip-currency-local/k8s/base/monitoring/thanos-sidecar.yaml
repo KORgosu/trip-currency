@@ -1,0 +1,31 @@
+# Thanos Object Storage Secret
+apiVersion: v1
+kind: Secret
+metadata:
+  name: thanos-objstore-config
+  namespace: monitoring
+type: Opaque
+stringData:
+  thanos.yaml: |
+    type: S3
+    config:
+      bucket: "thanos"
+      endpoint: "MINIO_ENDPOINT:9000"  # 실제 MinIO 엔드포인트로 변경
+      access_key: "admin"
+      secret_key: "password123"
+      insecure: true
+---
+# ServiceMonitor for Thanos Sidecar
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: thanos-sidecar
+  namespace: monitoring
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  endpoints:
+  - port: grpc
+    interval: 30s
+

@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-currency
+  labels:
+    app: service-currency
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: service-currency
+  template:
+    metadata:
+      labels:
+        app: service-currency
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+      - name: service-currency
+        image: korgosu/service-currency:latest
+        imagePullPolicy: Always
+        envFrom:
+        - configMapRef:
+            name: trip-service-config
+        - secretRef:
+            name: trip-service-secrets
+        env:
+        - name: PORT
+          value: "8000"
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: trip-service-secrets
+              key: mysql-password
+        - name: SKIP_MONGODB_INIT
+          value: "true"
+        ports:
+        - containerPort: 8000
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - ALL
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "384Mi"
+            cpu: "500m"
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir: {}
