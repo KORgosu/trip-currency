@@ -20,7 +20,8 @@ COPY . .
 RUN npm run build
 
 # Stage 2: Production stage
-FROM nginx:alpine AS production
+# nginx-unprivileged: uid 101(nginx)로 실행, port 8080, root 불필요
+FROM nginxinc/nginx-unprivileged:alpine AS production
 
 # Nginx 설정 파일 복사
 COPY nginx.conf /etc/nginx/nginx.conf
@@ -29,11 +30,11 @@ COPY nginx.conf /etc/nginx/nginx.conf
 COPY --from=builder /app/dist /usr/share/nginx/html
 
 # 포트 노출
-EXPOSE 80
+EXPOSE 8080
 
 # 헬스체크 추가
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost/ || exit 1
+  CMD wget -q --spider http://localhost:8080/ || exit 1
 
 # Nginx 시작
 CMD ["nginx", "-g", "daemon off;"]

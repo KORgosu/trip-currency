@@ -3,4 +3,4 @@ kind: ConfigMap
 metadata:
   name: frontend-config
 data:
-  api-base-url: "http://api-dev.trip-service.local"  # 개발환경 기본값
+  api-base-url: "https://2025teamproject.store"

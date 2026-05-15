@@ -212,29 +212,37 @@ Docker Build & Push (ECR)
 
 ---
 
-### 1-10. Pod 컨테이너 보안 (securityContext)
+### 1-10. Pod 컨테이너 보안 (securityContext + PSA)
 
-모든 Deployment/CronJob에 Pod 및 컨테이너 수준 securityContext 적용:
+모든 Deployment/CronJob에 Pod 및 컨테이너 수준 securityContext 적용. `trip-service-prod` 네임스페이스에 **Pod Security Admission `enforce=restricted`** 레이블 적용으로 비준수 Pod 배포 자체를 차단.
 
-| 서비스 | runAsNonRoot | readOnlyRootFilesystem | allowPrivilegeEscalation | capabilities |
-|--------|-------------|----------------------|------------------------|-------------|
-| frontend | - (nginx root) | ✅ | false | ALL drop + NET_BIND_SERVICE |
-| currency | ✅ (uid 1000) | ✅ | false | ALL drop |
-| history | ✅ (uid 1000) | ✅ | false | ALL drop |
-| ranking | ✅ (uid 1000) | ✅ | false | ALL drop |
-| kafka | ✅ (uid 1000) | - | false | ALL drop |
-| zookeeper | ✅ (uid 1000) | - | false | ALL drop |
-| kafka-ui | ✅ (uid 1000) | - | false | ALL drop |
-| dataingestor | ✅ (uid 1000) | ✅ | false | ALL drop |
+| 서비스 | runAsNonRoot | readOnlyRootFilesystem | allowPrivilegeEscalation | capabilities | seccompProfile |
+|--------|-------------|----------------------|------------------------|-------------|---------------|
+| frontend | ✅ (uid 101) | ✅ | false | ALL drop | RuntimeDefault |
+| currency | ✅ (uid 1000) | ✅ | false | ALL drop | RuntimeDefault |
+| history | ✅ (uid 1000) | ✅ | false | ALL drop | RuntimeDefault |
+| ranking | ✅ (uid 1000) | ✅ | false | ALL drop | RuntimeDefault |
+| kafka | ✅ (uid 1000) | - | false | ALL drop | RuntimeDefault |
+| zookeeper | ✅ (uid 1000) | - | false | ALL drop | RuntimeDefault |
+| kafka-ui | ✅ (uid 1000) | - | false | ALL drop | RuntimeDefault |
+| dataingestor | ✅ (uid 1000) | ✅ | false | ALL drop | RuntimeDefault |
 
 `readOnlyRootFilesystem` 적용 서비스는 emptyDir 볼륨으로 쓰기 경로 확보 (`/tmp`, `/app/logs`, nginx 임시 경로).
-frontend는 nginx:alpine이 :80 바인딩에 root가 필요하므로 `runAsNonRoot` 미적용 대신 `NET_BIND_SERVICE` capability로 보완.
+frontend는 `nginx:alpine`(root 필수) 대신 `nginxinc/nginx-unprivileged:alpine`(uid 101, :8080)으로 전환하여 `runAsNonRoot` 및 `NET_BIND_SERVICE` 예외 없이 PSA restricted 완전 준수.
+
+**PSA 네임스페이스 레이블 (`k8s/overlays/eks/namespace.yaml`)**
+```yaml
+pod-security.kubernetes.io/enforce: restricted
+pod-security.kubernetes.io/audit: restricted
+pod-security.kubernetes.io/warn: restricted
+```
 
 **기대 효과**
+- **정책 강제 (enforce)**: 매니페스트에 securityContext를 설정해도 PSA 기준 미달 Pod는 API 서버에서 즉시 거부 — kubectl/ArgoCD 양쪽 경로 모두 차단
 - **컨테이너 탈출 후 영향 최소화**: `runAsNonRoot`로 탈출해도 호스트에서 root 권한 행사 불가 — 노드 전체 장악 시나리오 차단
 - **파일시스템 변조 방지**: `readOnlyRootFilesystem`으로 악성 바이너리 생성·스크립트 삽입 불가 — 지속성(Persistence) 확보 난이도 상승
-- **커널 공격 표면 축소**: `capabilities.drop: ALL`로 컨테이너가 사용 가능한 Linux 시스템 콜 집합을 최소화 — 권한 에스컬레이션 익스플로잇 효과 감소
-- **Pod Security Standards 준수**: Kubernetes 권장 Restricted 정책에 근접 — 향후 PSA(Pod Security Admission) 도입 시 호환성 확보
+- **커널 공격 표면 축소**: `capabilities.drop: ALL` + `seccompProfile: RuntimeDefault`으로 허용 syscall 집합을 OS 기본 프로파일로 제한 — 권한 에스컬레이션 익스플로잇 효과 감소
+- **감사·경고 가시성**: audit/warn 레이블로 정책 위반 시도가 감사 로그와 API 응답에 기록
 
 ---
 
@@ -273,9 +281,11 @@ frontend는 nginx:alpine이 :80 바인딩에 root가 필요하므로 `runAsNonRo
 | HIGH | API 서버 0.0.0.0/0 허용 | ✅ 조치완료 (222.109.238.0/24) |
 | HIGH | NLB 중복 노출 | ✅ 조치완료 |
 | HIGH | GuardDuty 미활성화 | ✅ 조치완료 |
-| MEDIUM | securityContext 미설정 | ✅ 조치완료 |
+| MEDIUM | securityContext 미설정 | ✅ 조치완료 (runAsNonRoot·readOnlyRootFilesystem·capabilities.drop) |
+| MEDIUM | seccompProfile 미설정 | ✅ 조치완료 (전 워크로드 RuntimeDefault) |
+| MEDIUM | frontend root 실행 | ✅ 조치완료 (nginx-unprivileged:alpine, uid 101, :8080) |
+| MEDIUM | Pod Security Admission 미적용 | ✅ 조치완료 (enforce=restricted, trip-service-prod) |
 | MEDIUM | kafka-ui 무인증 접근 | ⚠️ 부분조치 (NP 차단, Auth 미설정) |
-| MEDIUM | frontend-config 오설정 | ❌ 미조치 |
 | MEDIUM | HPA 메트릭 미작동 | ⚠️ 부분조치 (Prometheus 설치, Adapter 미설치) |
 | MEDIUM | Redis 인증·암호화 미설정 | ❌ 미조치 (클러스터 재생성 필요) |
 | MEDIUM | latest 태그 / Kafka 가용성 | ❌ 미조치 |
@@ -504,16 +514,21 @@ External Secrets Operator를 통해 AWS Secrets Manager에서 자동 동기화 (
 
 ---
 
-### ✅ [MEDIUM → 조치완료] Pod securityContext 설정 (전 서비스)
+### ✅ [MEDIUM → 조치완료] Pod securityContext + Pod Security Admission 설정 (전 서비스)
 
 - **조치일**: 2026-05-15
-- **조치 내용**: 전 Deployment/CronJob에 Pod 및 컨테이너 수준 securityContext 적용
+- **조치 내용 (1차)**: 전 Deployment/CronJob에 Pod 및 컨테이너 수준 securityContext 적용
   - Pod 수준: `runAsNonRoot: true`, `runAsUser: 1000`, `runAsGroup: 1000`, `fsGroup: 1000`
   - 컨테이너 수준: `allowPrivilegeEscalation: false`, `readOnlyRootFilesystem: true`, `capabilities.drop: ALL`
-- **서비스별 예외**:
-  - **frontend**: nginx:alpine이 :80 바인딩을 위해 root 실행 필요 → `runAsNonRoot` 미적용, `capabilities.add: NET_BIND_SERVICE` 추가. `readOnlyRootFilesystem: true` 적용 후 nginx 임시 경로 4개를 emptyDir로 마운트
-  - **kafka/zookeeper/kafka-ui**: 데이터 기록 필요로 `readOnlyRootFilesystem` 미적용
-- **결과**: 컨테이너 탈출 시 root 권한 행사 불가. 파일시스템 변조 방지
+- **조치 내용 (2차, 2026-05-15)**: PSA `restricted` 완전 준수를 위한 추가 조치
+  - **전 워크로드**: Pod 수준 `seccompProfile: {type: RuntimeDefault}` 추가 (PSA restricted 필수 요건)
+  - **frontend**: `nginx:alpine`(root 필수, :80) → `nginxinc/nginx-unprivileged:alpine`(uid 101, :8080)으로 이미지 전환
+    - `runAsNonRoot: true`, `runAsUser: 101` 적용 가능
+    - `NET_BIND_SERVICE` capability 제거 (포트 8080은 비특권 포트)
+    - Service `targetPort: 8080`, NetworkPolicy `port: 8080`으로 연동 수정
+  - **kafka/zookeeper/kafka-ui**: 데이터 기록 필요로 `readOnlyRootFilesystem` 미적용 (PSA restricted 비필수 항목)
+  - **Namespace**: `pod-security.kubernetes.io/enforce: restricted` 레이블 적용 → 기준 미달 Pod 배포 차단
+- **결과**: 전 서비스 PSA restricted 완전 준수. API 서버 수준에서 비준수 Pod 배포 자체를 차단
 
 ---
 
