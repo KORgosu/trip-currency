@@ -193,6 +193,10 @@ trip-currency-local-gitops/
 │           │       └── kafka-dashboard.yaml
 │           ├── logging/
 │           │   └── fluent-bit-values.yaml
+│           ├── jobs/                      # 일회성 초기화 Job (kustomize 제외, 수동 apply)
+│           │   ├── db-init-configmap.yaml # MySQL 스키마 SQL (init-db.sql 임베드)
+│           │   ├── db-init-job.yaml       # Aurora MySQL 스키마 초기화 Job + NetworkPolicy
+│           │   └── kafka-init-job.yaml    # Kafka 토픽 생성 Job + NetworkPolicy
 │           └── network-policies/
 │               ├── 00-default-deny.yaml
 │               ├── 01-allow-dns.yaml
@@ -200,8 +204,8 @@ trip-currency-local-gitops/
 │               ├── 03-currency.yaml
 │               ├── 04-history.yaml
 │               ├── 05-ranking.yaml
-│               ├── 06-dataingestor.yaml
-│               ├── 07-kafka.yaml          # kafka-exporter ingress 추가
+│               ├── 06-dataingestor.yaml   # egress: Kafka/Aurora:3306/DocDB:27017/Redis:6379/외부HTTPS
+│               ├── 07-kafka.yaml          # kafka-exporter ingress, inter-broker egress :9093
 │               ├── 08-kafka-ui.yaml
 │               ├── 09-zookeeper.yaml
 │               ├── 10-allow-prometheus-scrape.yaml  # monitoring ns → :8000/:8080/:9308
@@ -483,8 +487,8 @@ kubectl apply -f k8s/overlays/eks/network-policies/
 | 03-currency.yaml | ALB → :8000; egress: Aurora/DocDB/Redis/Kafka/외부 HTTPS |
 | 04-history.yaml | ALB → :8000; egress: Aurora/DocDB/Redis/Kafka |
 | 05-ranking.yaml | ALB → :8000; egress: DocDB/Redis/Kafka |
-| 06-dataingestor.yaml | ingress 없음; egress: Kafka/외부 HTTPS |
-| 07-kafka.yaml | 내부 서비스 + kafka-exporter → :9092; egress: Zookeeper :2181 |
+| 06-dataingestor.yaml | ingress 없음; egress: Kafka/Aurora:3306/DocDB:27017/Redis:6379/외부 HTTPS |
+| 07-kafka.yaml | 내부 서비스 + kafka-exporter → :9092; egress: Zookeeper :2181 / inter-broker :9093 |
 | 08-kafka-ui.yaml | ingress 완전 차단; egress: Kafka/Zookeeper |
 | 09-zookeeper.yaml | kafka/kafka-ui → :2181만 허용 |
 | 10-allow-prometheus-scrape.yaml | monitoring ns → 모든 Pod :8000/:8080/:9308 |
@@ -585,6 +589,14 @@ helm repo add fluent https://fluent.github.io/helm-charts
 helm upgrade --install fluent-bit fluent/fluent-bit \
   -n logging --create-namespace \
   -f k8s/overlays/eks/logging/fluent-bit-values.yaml
+
+# 9. DB 스키마 및 Kafka 토픽 초기화 (최초 1회)
+#    - jobs/ 디렉토리는 kustomize에 포함되지 않으므로 수동 apply
+kubectl apply -f k8s/overlays/eks/jobs/db-init-configmap.yaml
+kubectl apply -f k8s/overlays/eks/jobs/db-init-job.yaml        # Aurora MySQL 스키마 초기화
+kubectl apply -f k8s/overlays/eks/jobs/kafka-init-job.yaml     # Kafka 토픽 생성
+#    - Job 완료 확인:
+kubectl get job db-init kafka-init -n trip-service-prod
 ```
 
 ### 배포 상태 확인
@@ -618,6 +630,63 @@ kubectl get pvc -n monitoring
 curl https://2025teamproject.store/health
 curl https://2025teamproject.store/api/v1/currencies
 curl https://grafana.2025teamproject.store/api/health
+```
+
+---
+
+## 데이터 수집 파이프라인 (service-dataingestor)
+
+### 구성 개요
+
+`service-dataingestor`는 CronJob으로 5분마다 실행되어 외부 환율 API에서 데이터를 수집하고 DB에 저장합니다.
+
+| 항목 | 값 |
+|------|-----|
+| 실행 주기 | `*/5 * * * *` (5분마다) |
+| 실행 모드 | `single` (한 번 실행 후 종료) |
+| 외부 API | ExchangeRate-API v6 (`v6.exchangerate-api.com`) |
+| 수집 통화 수 | 70개 |
+| 저장 대상 | Aurora MySQL (`exchange_rate_history`) + Redis 캐시 |
+| 이벤트 발행 | Kafka (`new_data_received`, `exchange_rate_updated`, 등) |
+
+### Kafka 리스너 구성
+
+EKS hairpin routing 문제로 Kafka 브로커를 두 리스너로 분리합니다.
+
+| 리스너 | 주소 | 용도 |
+|--------|------|------|
+| INTERNAL | `pod-IP:9093` (Downward API) | Controller/inter-broker 통신 |
+| EXTERNAL | `service-kafka:9092` | 애플리케이션 클라이언트 접속 |
+
+> `KAFKA_INTER_BROKER_LISTENER_NAME=INTERNAL`로 설정하여 controller가 ClusterIP 경유 없이 pod IP로 직접 통신합니다.
+
+### DB 초기화 (최초 1회)
+
+Aurora MySQL에 스키마가 없으면 dataingestor가 실패합니다. 배포 후 반드시 초기화 Job을 실행하세요.
+
+```bash
+# SQL ConfigMap 생성 (init-db.sql 포함)
+kubectl apply -f k8s/overlays/eks/jobs/db-init-configmap.yaml
+
+# DB 스키마 초기화 Job 실행
+kubectl apply -f k8s/overlays/eks/jobs/db-init-job.yaml
+
+# 완료 확인 (Exit code: 0 이면 성공)
+kubectl logs -n trip-service-prod -l job-name=db-init
+```
+
+초기화 내용: `currencies` 마스터(70개 통화), `exchange_rate_history`, `daily_exchange_rates`, `collection_logs` 테이블 + 뷰 + 프로시저.
+
+### ExchangeRate-API 키 설정
+
+API 키는 AWS Secrets Manager에 저장되며 ESO를 통해 K8s Secret으로 주입됩니다.
+
+```bash
+# Secrets Manager에 API 키 업데이트
+aws secretsmanager put-secret-value \
+  --secret-id trip-currency/prod/trip-service-secrets \
+  --secret-string '{"exchange-api-key":"YOUR_API_KEY", ...}' \
+  --region ap-northeast-2
 ```
 
 ---

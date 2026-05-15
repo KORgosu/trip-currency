@@ -24,8 +24,8 @@
 | 03-currency | Ingress/Egress | ALB → :8000 / Aurora·Redis·Kafka·HTTPS |
 | 04-history | Ingress/Egress | ALB → :8000 / Aurora·DocDB·Redis·Kafka |
 | 05-ranking | Ingress/Egress | ALB → :8000 / DocDB·Redis·Kafka |
-| 06-dataingestor | Egress only | Kafka·외부 HTTPS (Ingress 없음) |
-| 07-kafka | Ingress/Egress | 내부 서비스 → :9092 / Zookeeper :2181 |
+| 06-dataingestor | Egress only | Kafka·Aurora:3306·DocDB:27017·Redis:6379·외부 HTTPS (Ingress 없음) |
+| 07-kafka | Ingress/Egress | 내부 서비스 → :9092 / Zookeeper :2181 / inter-broker :9093 |
 | 08-kafka-ui | Ingress 완전 차단 | Egress: Kafka·Zookeeper만 |
 | 09-zookeeper | Ingress | kafka·kafka-ui → :2181만 |
 | 10-allow-prometheus-scrape | Ingress | monitoring ns → :8000/:8080/:9308 |
@@ -336,7 +336,7 @@ pod-security.kubernetes.io/warn: restricted
 | MEDIUM | HPA 메트릭 미작동 | ⚠️ 부분조치 (Prometheus 설치, Adapter 미설치) |
 | MEDIUM | Redis 인증·암호화 미설정 | ❌ 미조치 (클러스터 재생성 필요) |
 | MEDIUM | latest 태그 / Kafka 가용성 | ❌ 미조치 |
-| LOW | dataingestor 초기 실패 이력 | 모니터링 중 |
+| LOW | dataingestor 파이프라인 연결 문제 | ✅ 조치완료 |
 
 ---
 
@@ -660,12 +660,17 @@ External Secrets Operator를 통해 AWS Secrets Manager에서 자동 동기화 (
 
 ---
 
-### [LOW] dataingestor CronJob 초기 3회 연속 실패
+### ✅ [LOW → 조치완료] dataingestor 파이프라인 전체 연결 문제
 
-- **현상**: 클러스터 초기화 직후 jobs 29646080~29646090 (약 15분간) Failed. 이후 정상화됨
-- **원인 추정**: Kafka 또는 DB 준비 완료 전 CronJob 실행 (초기화 경쟁 조건)
-- **현재 상태**: 이후 실행분은 모두 Complete — 현재 정상
-- **권고**: CronJob에 initContainer 또는 재시도 로직(backoffLimit) 설정으로 방지
+- **조치일**: 2026-05-16
+- **원인 및 조치 내용**:
+  1. **ConfigMap 플레이스홀더** — `kubectl apply -k` 사용 시 `${AURORA_ENDPOINT}` 등 미치환으로 MySQL 연결 실패. `kubectl patch`로 실제 엔드포인트 적용
+  2. **NetworkPolicy 누락** — `06-dataingestor.yaml`에 Aurora:3306·DocDB:27017·Redis:6379 egress 없음 → 추가
+  3. **DB 스키마 미초기화** — Aurora에 테이블 없음 → `db-init-job.yaml` 생성 및 실행 (스키마 + 통화 마스터 70개)
+  4. **Kafka inter-broker 차단 (available brokers: 0)** — EKS hairpin routing 문제로 controller가 `service-kafka:9092`(ClusterIP)로 자신에게 접속 실패 → Kafka 리스너를 INTERNAL(pod IP:9093) / EXTERNAL(service-kafka:9092)로 분리, `07-kafka.yaml`에 pod CIDR:9093 egress 추가
+  5. **ExchangeRate-API v6 마이그레이션** — 무료 v4 → 유료 v6, API 키를 Secrets Manager에 저장 후 CronJob 환경변수로 주입
+  6. **currencies 테이블 PLN 누락** — `init-db.sql` 및 DB에 폴란드 즐로티 추가
+- **결과**: ExchangeRate-API v6에서 70개 통화 수집 → MySQL 70건 저장 → Kafka 73개 이벤트 발행. Job status: **Complete**
 
 ---
 
@@ -696,3 +701,10 @@ External Secrets Operator를 통해 AWS Secrets Manager에서 자동 동기화 (
 | AlertManager Slack | #alerts-critical / #alerts-warning 수신 설정, webhook URL ESO 연동 |
 | PrometheusRule 3종 | 서비스 안정성(8개)·보안(4개)·Kafka(4개) 알림 규칙 |
 | Grafana 대시보드 3종 | Stability·Security·Kafka ConfigMap sidecar 자동 임포트 |
+| ExchangeRate-API v6 마이그레이션 | 무료 v4 → 유료 v6 전환, API 키 Secrets Manager 관리, 70개 통화 수집 |
+| Kafka 리스너 분리 (two-listener) | INTERNAL(pod IP:9093)/EXTERNAL(service-kafka:9092) 분리 — EKS hairpin routing 문제 해결 |
+| NetworkPolicy 06-dataingestor 수정 | Aurora:3306·DocDB:27017·Redis:6379 egress 추가 |
+| NetworkPolicy 07-kafka 수정 | inter-broker 통신용 pod CIDR:9093 egress 추가 |
+| DB 초기화 Job 추가 | db-init-job.yaml — Aurora MySQL 스키마·통화 마스터(70개) 초기화 |
+| Kafka 토픽 초기화 Job 추가 | kafka-init-job.yaml — 7개 토픽 생성 매니페스트 |
+| init-db.sql PLN 추가 | currencies 마스터에 폴란드 즐로티 추가 |
