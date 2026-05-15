@@ -28,7 +28,8 @@
 | 07-kafka | Ingress/Egress | 내부 서비스 → :9092 / Zookeeper :2181 |
 | 08-kafka-ui | Ingress 완전 차단 | Egress: Kafka·Zookeeper만 |
 | 09-zookeeper | Ingress | kafka·kafka-ui → :2181만 |
-| 10-allow-prometheus-scrape | Ingress | monitoring ns → :8000/:8080 |
+| 10-allow-prometheus-scrape | Ingress | monitoring ns → :8000/:8080/:9308 |
+| 11-kafka-exporter | Ingress/Egress | monitoring ns → :9308 / kafka :9092 |
 
 **기대 효과**
 - **Lateral Movement 차단**: 특정 Pod 침해 시 다른 서비스로 이동 불가 — 피해 범위가 침해된 Pod 단일 서비스로 봉쇄됨
@@ -258,6 +259,7 @@ pod-security.kubernetes.io/warn: restricted
 | sa-kafka | kafka | 없음 | false |
 | sa-zookeeper | zookeeper | 없음 | false |
 | sa-kafka-ui | kafka-ui | 없음 | false |
+| sa-kafka-exporter | kafka-exporter | 없음 | false |
 
 모든 앱 서비스는 K8s API를 직접 호출하지 않으므로 Role/RoleBinding 없이 토큰 마운트만 비활성화. 인프라 컴포넌트(ALB Controller, ESO, EBS CSI)는 이미 IRSA로 별도 관리.
 
@@ -270,10 +272,32 @@ pod-security.kubernetes.io/warn: restricted
 
 ### 1-12. 관측성 (모니터링·로깅)
 
-**메트릭 (monitoring 네임스페이스)**
+**메트릭 수집 (monitoring 네임스페이스)**
 - Prometheus: trip-service-prod 전 Pod scrape (`prometheus.io/scrape: "true"` 어노테이션), retention 15d
-- Grafana: `https://grafana.2025teamproject.store` (ALB HTTPS)
-- AlertManager: gp3-encrypted 스토리지
+- kafka-exporter: `danielqsj/kafka-exporter:v1.7.0` — Kafka Consumer Lag·Broker 상태 메트릭을 :9308에서 노출, Prometheus가 자동 수집
+- Grafana: `https://grafana.2025teamproject.store` (ALB HTTPS), sidecar 자동 임포트 (label: `grafana_dashboard: "1"`)
+- AlertManager: gp3-encrypted 스토리지, Slack 수신 설정 (#alerts-critical / #alerts-warning)
+
+**Grafana 대시보드 (ConfigMap 자동 임포트)**
+
+| 대시보드 | UID | 주요 패널 |
+|---------|-----|---------|
+| Trip Service - Stability | trip-stability | Pod 재시작율, Ready 상태, Deployment 레플리카, HPA, Node CPU/Memory, 컨테이너 리소스 |
+| Trip Service - Security | trip-security | 비정상 재시작(1h), 네트워크 Egress/Ingress, CPU 스로틀링, Disk 사용률 |
+| Trip Service - Kafka | trip-kafka | Consumer Group Lag (시계열/히트맵), 오프셋 커밋 속도, Broker 수, Topic 처리량 |
+
+**AlertManager 알림 규칙 (PrometheusRule)**
+
+| 파일 | 알림 수 | 주요 알림 |
+|------|--------|---------|
+| prometheus-rules-stability.yaml | 8개 | PodCrashLooping, PodNotReady, DeploymentReplicasMismatch, HPAMaxReplicas, NodeHighCPU, NodeHighMemory, NodeDiskSpaceLow, PVCUsageHigh |
+| prometheus-rules-security.yaml | 4개 | AbnormalPodRestartSpike, ContainerCPUThrottling, HighNetworkEgress, UnexpectedPrivilegedContainer |
+| prometheus-rules-kafka.yaml | 4개 | KafkaConsumerGroupLagHigh(>1000), KafkaConsumerGroupLagCritical(>5000), KafkaBrokerDown, KafkaConsumerGroupNoProgress |
+
+**AlertManager Slack 라우팅**
+- `severity: critical` → `#alerts-critical` 채널
+- `severity: warning` → `#alerts-warning` 채널
+- Slack webhook URL: AWS Secrets Manager `trip-currency/prod/alertmanager-slack` → ESO → K8s Secret `alertmanager-slack-webhook` → `alertmanagerSpec.secrets` 마운트 → `api_url_file` 경로 참조 (URL 평문 노출 없음)
 
 **로그 (logging 네임스페이스)**
 
@@ -353,6 +377,7 @@ pod-security.kubernetes.io/warn: restricted
 | service-ranking | ECR:latest | 2 | ClusterIP | 8000 | min:1 / max:8 |
 | kafka | confluentinc/cp-kafka:7.4.0 | 1 | ClusterIP | 9092 | 없음 |
 | kafka-ui | provectuslabs/kafka-ui:latest | 1 | ClusterIP | 8080 | 없음 |
+| kafka-exporter | danielqsj/kafka-exporter:v1.7.0 | 1 | ClusterIP | 9308 | 없음 |
 | zookeeper | confluentinc/cp-zookeeper:7.4.0 | 1 | ClusterIP | 2181 | 없음 |
 | service-dataingestor | ECR:latest | - | CronJob (*/5 * * * *) | - | - |
 
@@ -409,11 +434,15 @@ pod-security.kubernetes.io/warn: restricted
 |---------|------|---------|
 | Prometheus | 메트릭 수집·저장 (retention: 15d) | gp3-encrypted 20Gi |
 | Grafana | 대시보드 시각화 (admin: K8s Secret `grafana-admin-secret` 참조) | gp3-encrypted 5Gi |
-| AlertManager | 알림 라우팅 | gp3-encrypted 2Gi |
+| AlertManager | 알림 라우팅 (Slack #alerts-critical / #alerts-warning) | gp3-encrypted 2Gi |
 | node-exporter | 노드 메트릭 수집 | DaemonSet x 3 |
 | kube-state-metrics | Deployment/Pod 상태 메트릭 | - |
 
-- 스크래핑: `prometheus.io/scrape: "true"` 어노테이션 기반으로 trip-service-prod 파드 자동 수집
+- 스크래핑: `prometheus.io/scrape: "true"` 어노테이션 기반으로 trip-service-prod 파드 자동 수집 (포트 8000·8080·9308)
+- kafka-exporter: `danielqsj/kafka-exporter:v1.7.0` — Consumer Lag·Broker 메트릭 제공 (trip-service-prod 네임스페이스 배포)
+- Grafana 자동 대시보드: `grafana_dashboard: "1"` 레이블 ConfigMap sidecar 자동 임포트 (Stability·Security·Kafka 3종)
+- PrometheusRule: stability 8개·security 4개·kafka 4개 알림 규칙 (monitoring 네임스페이스)
+- AlertManager Slack webhook: ESO → `alertmanager-slack-webhook` Secret → `api_url_file` 마운트 (평문 미노출)
 - Grafana 외부 접근: `https://grafana.2025teamproject.store` (ALB HTTPS, IngressGroup 공유)
 
 #### logging (namespace: `logging`)
@@ -662,3 +691,8 @@ External Secrets Operator를 통해 AWS Secrets Manager에서 자동 동기화 (
 | SBOM 파이프라인 | Jenkinsfile.production에 Trivy SBOM 생성 + CRITICAL 취약점 차단 스테이지 추가 |
 | GuardDuty | Detector 활성화 (CloudTrail, DNS, VPC Flow, EKS Audit, Runtime, S3, EBS, RDS 전체 활성화) |
 | Pod securityContext | 전 Deployment/CronJob에 runAsNonRoot, readOnlyRootFilesystem, allowPrivilegeEscalation:false, capabilities.drop:ALL 적용 |
+| kafka-exporter | danielqsj/kafka-exporter:v1.7.0 배포 — Consumer Lag·Broker 메트릭 Prometheus 수집 |
+| NetworkPolicy 11-kafka-exporter | kafka-exporter 전용 정책 (monitoring→:9308, egress kafka:9092) |
+| AlertManager Slack | #alerts-critical / #alerts-warning 수신 설정, webhook URL ESO 연동 |
+| PrometheusRule 3종 | 서비스 안정성(8개)·보안(4개)·Kafka(4개) 알림 규칙 |
+| Grafana 대시보드 3종 | Stability·Security·Kafka ConfigMap sidecar 자동 임포트 |
