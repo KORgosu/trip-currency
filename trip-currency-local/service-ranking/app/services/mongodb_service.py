@@ -30,11 +30,13 @@ class MongoDBService:
         self.db: Optional[AsyncIOMotorDatabase] = None
         self.country_clicks_collection: Optional[AsyncIOMotorCollection] = None
         self.click_history_collection: Optional[AsyncIOMotorCollection] = None
+        self.ranking_results_collection: Optional[AsyncIOMotorCollection] = None
         self.connected = False
-        
+
         # 컬렉션명
         self.COUNTRY_CLICKS_COLLECTION = "country_clicks"
         self.CLICK_HISTORY_COLLECTION = "click_history"
+        self.RANKING_RESULTS_COLLECTION = "ranking_results"
     
     async def connect(self):
         """MongoDB 연결"""
@@ -74,6 +76,7 @@ class MongoDBService:
             self.db = self.client[database]
             self.country_clicks_collection = self.db[self.COUNTRY_CLICKS_COLLECTION]
             self.click_history_collection = self.db[self.CLICK_HISTORY_COLLECTION]
+            self.ranking_results_collection = self.db[self.RANKING_RESULTS_COLLECTION]
             
             # 인덱스 생성
             await self._create_indexes()
@@ -91,26 +94,31 @@ class MongoDBService:
         try:
             if not self.connected:
                 return
-            
+
             # country_clicks 컬렉션 인덱스
             await self.country_clicks_collection.create_index([
                 ("country_code", 1),
                 ("date", 1)
             ], unique=True)
-            
+
             await self.country_clicks_collection.create_index([
                 ("daily_clicks", -1),
                 ("date", 1)
             ])
-            
+
             # click_history 컬렉션 인덱스
             await self.click_history_collection.create_index([
                 ("country_code", 1),
                 ("date", 1)
             ], unique=True)
-            
+
+            # ranking_results 컬렉션 인덱스 (period가 PK)
+            await self.ranking_results_collection.create_index(
+                [("period", 1)], unique=True
+            )
+
             logger.info("MongoDB indexes created successfully")
-            
+
         except Exception as e:
             logger.warning(f"Failed to create MongoDB indexes: {e}")
     
@@ -399,6 +407,55 @@ class MongoDBService:
             ]
         }
     
+    async def upsert_ranking_result(
+        self,
+        period: str,
+        ranking_data: list,
+        total_selections: int = 0,
+        metadata: dict = None
+    ) -> None:
+        """ranking_results 컬렉션에 랭킹 결과 upsert (period가 PK)"""
+        if not self.connected:
+            raise DatabaseError("MongoDB not connected")
+
+        now = DateTimeUtils.kst_now()
+        doc = {
+            "period": period,
+            "ranking_data": ranking_data,
+            "total_selections": total_selections,
+            "last_updated": now.isoformat() + "Z",
+        }
+        if metadata:
+            doc["calculation_metadata"] = metadata
+
+        await self.ranking_results_collection.find_one_and_update(
+            {"period": period},
+            {"$set": doc},
+            upsert=True
+        )
+        logger.info(f"Upserted ranking_result for period={period}")
+
+    async def get_ranking_result(self, period: str) -> Optional[Dict]:
+        """period별 랭킹 결과 조회"""
+        if not self.connected:
+            return None
+
+        doc = await self.ranking_results_collection.find_one({"period": period})
+        return doc
+
+    async def list_ranking_results(self) -> List[Dict]:
+        """저장된 랭킹 결과 목록 조회 (period, last_updated만 반환)"""
+        if not self.connected:
+            return []
+
+        cursor = self.ranking_results_collection.find(
+            {}, {"period": 1, "last_updated": 1, "_id": 0}
+        )
+        results = []
+        async for doc in cursor:
+            results.append(doc)
+        return results
+
     async def close(self):
         """MongoDB 연결 종료"""
         try:

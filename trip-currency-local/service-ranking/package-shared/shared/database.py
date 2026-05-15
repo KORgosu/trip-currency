@@ -236,13 +236,14 @@ class MongoDBHelper:
 
 
 class DynamoDBHelper:
-    """DynamoDB 헬퍼 클래스 (로컬에서는 Mock)"""
-    
-    def __init__(self):
+    """DynamoDB 헬퍼 클래스 (Mock — 실제 구현은 mongodb_service.py 사용)"""
+
+    def __init__(self, table_name: str = None):
+        self.table_name = table_name
         self.client = None
-    
+
     async def initialize(self):
-        """DynamoDB 초기화 (로컬에서는 Mock)"""
+        """DynamoDB 초기화 (Mock)"""
         logger.info("DynamoDB helper initialized (Mock mode for local development)")
     
     async def put_item(self, item: Dict[str, Any]) -> bool:

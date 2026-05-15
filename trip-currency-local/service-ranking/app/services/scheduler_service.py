@@ -141,11 +141,7 @@ class RankingScheduler:
         reset_time = DateTimeUtils.kst_now()
         correlation_id = f"reset_{reset_time.strftime('%Y%m%d_%H%M%S')}"
         
-        logger.info(
-            f"Starting daily reset",
-            correlation_id=correlation_id,
-            reset_time=reset_time.isoformat()
-        )
+        logger.info(f"Starting daily reset - correlation_id={correlation_id}, reset_time={reset_time.isoformat()}")
         
         try:
             self.stats["total_resets"] += 1
@@ -165,23 +161,13 @@ class RankingScheduler:
             # 다음 초기화 시간 업데이트
             self.stats["next_reset_time"] = self.get_next_reset_time().isoformat()
             
-            logger.info(
-                f"Daily reset completed successfully",
-                correlation_id=correlation_id,
-                reset_count=reset_count,
-                reset_time=reset_time.isoformat()
-            )
+            logger.info(f"Daily reset completed successfully - correlation_id={correlation_id}, reset_count={reset_count}, reset_time={reset_time.isoformat()}")
             
         except Exception as e:
             self.stats["failed_resets"] += 1
             self.stats["last_error"] = str(e)
             
-            logger.error(
-                f"Daily reset failed",
-                correlation_id=correlation_id,
-                error=e,
-                reset_time=reset_time.isoformat()
-            )
+            logger.error(f"Daily reset failed - correlation_id={correlation_id}, error={e}, reset_time={reset_time.isoformat()}")
             
             raise SchedulerError(f"Daily reset failed: {e}")
     

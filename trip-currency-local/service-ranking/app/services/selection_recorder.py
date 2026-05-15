@@ -27,21 +27,9 @@ class SelectionRecorder:
         self.table_name = "travel_destination_selections"
     
     async def initialize(self):
-        """서비스 초기화"""
-        try:
-            # DynamoDB 헬퍼 초기화 (테이블이 존재하지 않을 수 있음)
-            try:
-                from shared.database import get_db_manager
-                db_manager = get_db_manager()
-                self.dynamodb_helper = DynamoDBHelper(self.table_name)
-                logger.info("DynamoDB helper initialized for selections")
-            except Exception as e:
-                logger.warning(f"DynamoDB not available, using Redis fallback: {e}")
-                self.dynamodb_helper = None
-                
-        except Exception as e:
-            logger.error(f"Failed to initialize SelectionRecorder: {e}")
-            raise
+        """서비스 초기화 — 실제 저장소는 mongodb_service(DocumentDB) 사용"""
+        self.dynamodb_helper = None
+        logger.info("SelectionRecorder initialized (DocumentDB mode)")
     
     async def record_selection(
         self,

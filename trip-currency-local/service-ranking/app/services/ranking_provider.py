@@ -30,21 +30,9 @@ class RankingProvider:
         self.cache_ttl = 300  # 5분
     
     async def initialize(self):
-        """서비스 초기화"""
-        try:
-            # DynamoDB 헬퍼 초기화
-            try:
-                from shared.database import get_db_manager
-                db_manager = get_db_manager()
-                self.dynamodb_helper = DynamoDBHelper(self.rankings_table)
-                logger.info("DynamoDB helper initialized for rankings")
-            except Exception as e:
-                logger.warning(f"DynamoDB not available, using mock data: {e}")
-                self.dynamodb_helper = None
-                
-        except Exception as e:
-            logger.error(f"Failed to initialize RankingProvider: {e}")
-            raise
+        """서비스 초기화 — 실제 랭킹 저장소는 mongodb_service(DocumentDB) 사용"""
+        self.dynamodb_helper = None
+        logger.info("RankingProvider initialized (DocumentDB mode)")
     
     async def get_rankings(
         self,
