@@ -69,11 +69,12 @@ class DataCollector:
     
     def _initialize_api_sources(self) -> Dict[str, Dict[str, Any]]:
         """API 소스 설정 초기화"""
+        api_key = self.config.external_apis.exchange_api_key
         return {
             "exchangerate_api": {  # 메인 API
                 "name": "ExchangeRate-API",
-                "base_url": "https://api.exchangerate-api.com/v4/latest/KRW",
-                "api_key": None,  # API 키 불필요
+                "base_url": f"https://v6.exchangerate-api.com/v6/{api_key}/latest/KRW",
+                "api_key": api_key,
                 "currencies": [
                     # 주요 통화 (24개)
                     "USD", "JPY", "EUR", "GBP", "CNY", "AUD", "CAD", "CHF", 
@@ -207,31 +208,33 @@ class DataCollector:
                 
                 raw_data = []
                 
-                if "rates" in data:
-                    logger.info(f"Received rates for {len(data['rates'])} currencies")
-                    
-                    # 모든 통화 수집 (currencies 리스트가 비어있으면 모든 통화)
-                    target_currencies = config["currencies"] if config["currencies"] else data["rates"].keys()
-                    
-                    for currency_code, rate in data["rates"].items():
+                # v6 API: conversion_rates 키 사용, result 필드로 성공 여부 확인
+                if data.get("result") == "success" and "conversion_rates" in data:
+                    rates = data["conversion_rates"]
+                    logger.info(f"Received rates for {len(rates)} currencies")
+
+                    target_currencies = config["currencies"] if config["currencies"] else rates.keys()
+
+                    for currency_code, rate in rates.items():
                         if not config["currencies"] or currency_code in target_currencies:
-                            # KRW 기준이므로 역수 계산 (1 USD = 1300 KRW -> 1 KRW = 1/1300 USD)
+                            # base=KRW 이므로 역수 계산: 1 KRW = rate USD → 1 USD = 1/rate KRW
                             krw_rate = 1 / rate if rate > 0 else 0
-                            
+
                             raw_data.append(RawExchangeRateData(
                                 currency_code=currency_code,
                                 rate=krw_rate,
                                 timestamp=DateTimeUtils.utc_now(),
                                 metadata={
-                                    "base_currency": data.get("base", "KRW"),
-                                    "date": data.get("date"),
+                                    "base_currency": data.get("base_code", "KRW"),
+                                    "date": data.get("time_last_update_utc"),
                                     "original_rate": rate
                                 }
                             ))
-                    
+
                     logger.info(f"Successfully collected {len(raw_data)} exchange rates")
                 else:
-                    logger.warning("No rates found in ExchangeRate-API response")
+                    error_type = data.get("error-type", "unknown")
+                    logger.warning(f"ExchangeRate-API v6 error: {error_type}", response=data)
                 
                 return raw_data
                 

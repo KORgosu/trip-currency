@@ -89,8 +89,7 @@ class MessagingConfig(BaseSettings):
 
 class ExternalAPIsConfig(BaseSettings):
     """외부 API 설정"""
-    # ExchangeRate-API는 API 키가 필요하지 않음
-    pass
+    exchange_api_key: str = Field(default="", env="EXCHANGE_API_KEY")
 
 
 class ServiceConfig(BaseSettings):
