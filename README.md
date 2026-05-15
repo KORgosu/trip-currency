@@ -246,7 +246,31 @@ pod-security.kubernetes.io/warn: restricted
 
 ---
 
-### 1-11. 관측성 (모니터링·로깅)
+### 1-11. Kubernetes RBAC (인-클러스터 접근 제어)
+
+서비스별 전용 ServiceAccount를 생성하고 K8s API 토큰 자동 마운트를 비활성화하여, 침해된 Pod가 클러스터 내부 리소스에 접근하는 경로를 원천 차단.
+
+| ServiceAccount | 대상 워크로드 | K8s API 접근 | automountToken |
+|---------------|-------------|------------|---------------|
+| sa-frontend | service-frontend | 없음 | false |
+| sa-currency | service-currency | 없음 | false |
+| sa-history | service-history | 없음 | false |
+| sa-ranking | service-ranking | 없음 | false |
+| sa-dataingestor | service-dataingestor (CronJob) | 없음 | false |
+| sa-kafka | kafka | 없음 | false |
+| sa-zookeeper | zookeeper | 없음 | false |
+| sa-kafka-ui | kafka-ui | 없음 | false |
+
+모든 앱 서비스는 K8s API를 직접 호출하지 않으므로 Role/RoleBinding 없이 토큰 마운트만 비활성화. 인프라 컴포넌트(ALB Controller, ESO, EBS CSI)는 이미 IRSA로 별도 관리.
+
+**기대 효과**
+- **K8s API 토큰 탈취 차단**: `automountServiceAccountToken: false`로 Pod 내부에 토큰 파일(`/var/run/secrets/kubernetes.io/serviceaccount/token`) 자체가 생성되지 않음 — 컨테이너 침해 후 토큰을 이용한 K8s API 호출 불가
+- **Lateral Movement 차단**: `default` SA 공유 제거로 침해된 Pod가 타 서비스 리소스(ConfigMap, Secret, Pod 목록 등)를 조회·수정하는 경로 차단
+- **최소 권한 원칙**: 각 서비스가 자신의 SA만 보유 — 하나의 SA 침해가 네임스페이스 전체로 확산되지 않음
+
+---
+
+### 1-12. 관측성 (모니터링·로깅)
 
 **메트릭 (monitoring 네임스페이스)**
 - Prometheus: trip-service-prod 전 Pod scrape (`prometheus.io/scrape: "true"` 어노테이션), retention 15d
@@ -550,6 +574,17 @@ External Secrets Operator를 통해 AWS Secrets Manager에서 자동 동기화 (
 - **현상**: frontend-config ConfigMap에 api-base-url: http://api-dev.trip-service.local — dev 환경 URL이 prod 네임스페이스에 설정됨
 - **영향**: 프론트엔드가 이 값을 사용할 경우 API 호출 실패 또는 잘못된 엔드포인트로 요청
 - **권고**: `https://2025teamproject.store` 로 수정 또는 불필요 시 제거 확인 필요
+
+---
+
+### ✅ [MEDIUM → 조치완료] Kubernetes RBAC 미구성
+
+- **조치일**: 2026-05-15
+- **조치 내용**: 전 워크로드에 전용 ServiceAccount 생성 및 K8s API 토큰 마운트 비활성화
+  - 서비스별 전용 SA 생성: `sa-frontend`, `sa-currency`, `sa-history`, `sa-ranking`, `sa-dataingestor`, `sa-kafka`, `sa-zookeeper`, `sa-kafka-ui`
+  - 전 Deployment/CronJob에 `serviceAccountName` 지정
+  - SA 및 Pod spec 양쪽에 `automountServiceAccountToken: false` 적용
+- **결과**: 침해된 Pod가 K8s API 토큰으로 클러스터 내부 리소스에 접근하는 경로 차단. `default` SA 공유 제거로 서비스 간 권한 격리 완성
 
 ---
 
