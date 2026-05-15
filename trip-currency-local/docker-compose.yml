@@ -7,13 +7,13 @@ x-common-env: &common-env
   DB_PORT: 3306
   DB_NAME: currency_db
   DB_USER: currency_user
-  DB_PASSWORD: password
+  DB_PASSWORD: ${DB_PASSWORD:-localdev_password}
   REDIS_HOST: redis
   REDIS_PORT: 6379
   MONGODB_HOST: mongodb
   MONGODB_PORT: 27017
   MONGODB_USER: admin
-  MONGODB_PASSWORD: password
+  MONGODB_PASSWORD: ${MONGODB_PASSWORD:-localdev_password}
   MONGODB_DATABASE: currency_db
   KAFKA_BOOTSTRAP_SERVERS: kafka:9093
   # AWS 관련 설정은 실제 AWS 서비스 사용 시 추가
@@ -23,10 +23,10 @@ services:
     image: mysql:8.4.5
     container_name: currency-mysql
     environment:
-      MYSQL_ROOT_PASSWORD: password
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-localdev_password}
       MYSQL_DATABASE: currency_db
       MYSQL_USER: currency_user
-      MYSQL_PASSWORD: password
+      MYSQL_PASSWORD: ${DB_PASSWORD:-localdev_password}
     ports:
       - "3306:3306"
     volumes:
@@ -35,7 +35,7 @@ services:
     networks:
       - currency-network
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-ppassword"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-localdev_password}"]
       timeout: 20s
       retries: 5
       interval: 10s
@@ -68,7 +68,7 @@ services:
       - ./scripts/init-mongodb.js:/docker-entrypoint-initdb.d/init-mongodb.js:ro
     environment:
       MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGODB_PASSWORD:-localdev_password}
       MONGO_INITDB_DATABASE: currency_db
     networks:
       - currency-network

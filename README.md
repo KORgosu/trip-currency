@@ -157,7 +157,7 @@
 
 ### 1-8. 위협 탐지 (GuardDuty)
 
-- **Detector ID**: `76cf15b6019a174f2a774043f211bb09` (ap-northeast-2)
+- **Detector ID**: `(실제 ID는 .env.aws 참조)` (ap-northeast-2)
 - **Finding 발행 주기**: 6시간
 
 활성화된 탐지 기능:
@@ -301,7 +301,7 @@ frontend는 nginx:alpine이 :80 바인딩에 root가 필요하므로 `runAsNonRo
 | 클러스터명 | trip-service-cluster |
 | Kubernetes 버전 | v1.33 (EKS platform: eks.37) |
 | 리전 | ap-northeast-2 (서울) |
-| VPC | vpc-07381d10b7074419d (CIDR: 192.168.0.0/16) |
+| VPC | vpc-xxxxxxxxxxxxxxxx (CIDR: 192.168.0.0/16) |
 | 노드 그룹 | trip-service-workers (t3.medium x 3, min:2 / max:5) |
 | 노드 OS | Amazon Linux 2023 (nodeadm) |
 | 인증 모드 | API_AND_CONFIG_MAP |
@@ -327,9 +327,9 @@ frontend는 nginx:alpine이 :80 바인딩에 root가 필요하므로 `runAsNonRo
 
 | DB | 엔진 | 엔드포인트 | 포트 | 접근 허용 CIDR |
 |----|------|-----------|------|---------------|
-| trip-aurora-cluster | Aurora MySQL | trip-aurora-cluster.cluster-cxiuq4kag9i2.ap-northeast-2.rds.amazonaws.com | 3306 | 192.168.0.0/16 |
-| trip-docdb-cluster | DocumentDB (MongoDB 호환) | trip-docdb-cluster.cluster-cxiuq4kag9i2.ap-northeast-2.docdb.amazonaws.com | 27017 | 192.168.0.0/16 |
-| trip-redis-cluster | ElastiCache Redis | trip-redis-cluster.84xmxv.0001.apn2.cache.amazonaws.com | 6379 | 192.168.0.0/16 |
+| trip-aurora-cluster | Aurora MySQL | trip-aurora-cluster.cluster-xxxxxxxxxx.ap-northeast-2.rds.amazonaws.com | 3306 | 192.168.0.0/16 |
+| trip-docdb-cluster | DocumentDB (MongoDB 호환) | trip-docdb-cluster.cluster-xxxxxxxxxx.ap-northeast-2.docdb.amazonaws.com | 27017 | 192.168.0.0/16 |
+| trip-redis-cluster | ElastiCache Redis | trip-redis-cluster.xxxxxx.0001.apn2.cache.amazonaws.com | 6379 | 192.168.0.0/16 |
 
 모든 DB 보안 그룹은 VPC 내부 CIDR(192.168.0.0/16)만 허용하며 외부 직접 접근 불가.
 

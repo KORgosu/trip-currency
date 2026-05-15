@@ -17,7 +17,7 @@ patches:
   patch: |-
     - op: replace
       path: /spec/template/spec/containers/0/image
-      value: 716773066105.dkr.ecr.ap-northeast-2.amazonaws.com/service-frontend:latest
+      value: ${AWS_ACCOUNT_ID}.dkr.ecr.ap-northeast-2.amazonaws.com/service-frontend:latest
     - op: replace
       path: /spec/template/spec/containers/0/imagePullPolicy
       value: Always
@@ -28,7 +28,7 @@ patches:
   patch: |-
     - op: replace
       path: /spec/template/spec/containers/0/image
-      value: 716773066105.dkr.ecr.ap-northeast-2.amazonaws.com/service-currency:latest
+      value: ${AWS_ACCOUNT_ID}.dkr.ecr.ap-northeast-2.amazonaws.com/service-currency:latest
     - op: replace
       path: /spec/template/spec/containers/0/imagePullPolicy
       value: Always
@@ -39,7 +39,7 @@ patches:
   patch: |-
     - op: replace
       path: /spec/template/spec/containers/0/image
-      value: 716773066105.dkr.ecr.ap-northeast-2.amazonaws.com/service-history:latest
+      value: ${AWS_ACCOUNT_ID}.dkr.ecr.ap-northeast-2.amazonaws.com/service-history:latest
     - op: replace
       path: /spec/template/spec/containers/0/imagePullPolicy
       value: Always
@@ -50,7 +50,7 @@ patches:
   patch: |-
     - op: replace
       path: /spec/template/spec/containers/0/image
-      value: 716773066105.dkr.ecr.ap-northeast-2.amazonaws.com/service-ranking:latest
+      value: ${AWS_ACCOUNT_ID}.dkr.ecr.ap-northeast-2.amazonaws.com/service-ranking:latest
     - op: replace
       path: /spec/template/spec/containers/0/imagePullPolicy
       value: Always
@@ -61,7 +61,7 @@ patches:
   patch: |-
     - op: replace
       path: /spec/jobTemplate/spec/template/spec/containers/0/image
-      value: 716773066105.dkr.ecr.ap-northeast-2.amazonaws.com/service-dataingestor:latest
+      value: ${AWS_ACCOUNT_ID}.dkr.ecr.ap-northeast-2.amazonaws.com/service-dataingestor:latest
     - op: replace
       path: /spec/jobTemplate/spec/template/spec/containers/0/imagePullPolicy
       value: Always
@@ -72,19 +72,19 @@ patches:
   patch: |-
     - op: replace
       path: /data/MYSQL_HOST
-      value: "trip-aurora-cluster.cluster-cxiuq4kag9i2.ap-northeast-2.rds.amazonaws.com"
+      value: "${AURORA_ENDPOINT}"
     - op: replace
       path: /data/MYSQL_USER
       value: "trip_admin"
     - op: replace
       path: /data/MONGODB_HOST
-      value: "trip-docdb-cluster.cluster-cxiuq4kag9i2.ap-northeast-2.docdb.amazonaws.com"
+      value: "${DOCDB_ENDPOINT}"
     - op: replace
       path: /data/MONGODB_USER
       value: "trip_admin"
     - op: replace
       path: /data/REDIS_HOST
-      value: "trip-redis-cluster.84xmxv.0001.apn2.cache.amazonaws.com"
+      value: "${REDIS_ENDPOINT}"
     - op: add
       path: /data/ENVIRONMENT
       value: "prod"
