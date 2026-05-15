@@ -1,0 +1,38 @@
+# kafka-exporter:
+#   Ingress: monitoring 네임스페이스의 Prometheus → 9308 (메트릭 스크래핑)
+#   Egress:  Kafka → 9092 (메트릭 수집), DNS → 53
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-kafka-exporter
+  namespace: trip-service-prod
+spec:
+  podSelector:
+    matchLabels:
+      app: kafka-exporter
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: monitoring
+    ports:
+    - protocol: TCP
+      port: 9308
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: kafka
+    ports:
+    - protocol: TCP
+      port: 9092
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53

@@ -1,0 +1,141 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-kafka
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  kafka.json: |
+    {
+      "title": "Trip Service - Kafka",
+      "uid": "trip-kafka",
+      "tags": ["trip-service", "kafka"],
+      "timezone": "Asia/Seoul",
+      "schemaVersion": 38,
+      "refresh": "30s",
+      "time": { "from": "now-3h", "to": "now" },
+      "panels": [
+        {
+          "id": 1,
+          "title": "Consumer Group Lag by Topic",
+          "type": "timeseries",
+          "gridPos": { "x": 0, "y": 0, "w": 24, "h": 9 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum by(consumergroup, topic) (kafka_consumergroup_lag)",
+              "legendFormat": "{{ consumergroup }} / {{ topic }}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": { "unit": "short",
+              "thresholds": { "mode": "absolute", "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 1000 },
+                { "color": "red", "value": 5000 }
+              ]}
+            }
+          }
+        },
+        {
+          "id": 2,
+          "title": "Consumer Group Lag — Current",
+          "type": "bargauge",
+          "gridPos": { "x": 0, "y": 9, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum by(consumergroup) (kafka_consumergroup_lag)",
+              "legendFormat": "{{ consumergroup }}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": { "unit": "short",
+              "thresholds": { "mode": "absolute", "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 500 },
+                { "color": "red", "value": 5000 }
+              ]},
+              "color": { "mode": "thresholds" }
+            }
+          }
+        },
+        {
+          "id": 3,
+          "title": "Consumer Group Offset Rate (msg/s)",
+          "type": "timeseries",
+          "gridPos": { "x": 12, "y": 9, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum by(consumergroup, topic) (rate(kafka_consumergroup_current_offset[5m]))",
+              "legendFormat": "{{ consumergroup }} / {{ topic }}"
+            }
+          ],
+          "fieldConfig": { "defaults": { "unit": "mps" } }
+        },
+        {
+          "id": 4,
+          "title": "Kafka Broker Count",
+          "type": "stat",
+          "gridPos": { "x": 0, "y": 17, "w": 6, "h": 5 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "kafka_brokers",
+              "legendFormat": "Brokers"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": { "unit": "short", "color": { "mode": "thresholds" },
+              "thresholds": { "mode": "absolute", "steps": [
+                { "color": "red", "value": null },
+                { "color": "green", "value": 1 }
+              ]}
+            }
+          }
+        },
+        {
+          "id": 5,
+          "title": "Topic Partition Count",
+          "type": "stat",
+          "gridPos": { "x": 6, "y": 17, "w": 6, "h": 5 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "count(kafka_topic_partitions)",
+              "legendFormat": "Partitions"
+            }
+          ],
+          "fieldConfig": { "defaults": { "unit": "short" } }
+        },
+        {
+          "id": 6,
+          "title": "Messages In (per topic, /s)",
+          "type": "timeseries",
+          "gridPos": { "x": 12, "y": 17, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum by(topic) (rate(kafka_topic_partition_current_offset[5m]))",
+              "legendFormat": "{{ topic }}"
+            }
+          ],
+          "fieldConfig": { "defaults": { "unit": "mps" } }
+        },
+        {
+          "id": 7,
+          "title": "Consumer Group Lag Heatmap",
+          "type": "heatmap",
+          "gridPos": { "x": 0, "y": 25, "w": 24, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum by(consumergroup, topic) (kafka_consumergroup_lag)",
+              "legendFormat": "{{ consumergroup }}/{{ topic }}"
+            }
+          ]
+        }
+      ]
+    }

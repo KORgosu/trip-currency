@@ -1,0 +1,157 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-security
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  security.json: |
+    {
+      "title": "Trip Service - Security",
+      "uid": "trip-security",
+      "tags": ["trip-service", "security"],
+      "timezone": "Asia/Seoul",
+      "schemaVersion": 38,
+      "refresh": "60s",
+      "time": { "from": "now-6h", "to": "now" },
+      "panels": [
+        {
+          "id": 1,
+          "title": "Pod Restart Count (1h) — Anomaly Indicator",
+          "type": "timeseries",
+          "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "increase(kube_pod_container_status_restarts_total{namespace=\"trip-service-prod\"}[1h])",
+              "legendFormat": "{{ pod }} / {{ container }}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": { "unit": "short",
+              "thresholds": { "mode": "absolute", "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 3 },
+                { "color": "red", "value": 5 }
+              ]}
+            }
+          }
+        },
+        {
+          "id": 2,
+          "title": "Network Egress (bytes/s)",
+          "type": "timeseries",
+          "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum by(pod) (rate(container_network_transmit_bytes_total{namespace=\"trip-service-prod\"}[5m]))",
+              "legendFormat": "{{ pod }}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": { "unit": "Bps",
+              "thresholds": { "mode": "absolute", "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 5242880 },
+                { "color": "red", "value": 10485760 }
+              ]}
+            }
+          }
+        },
+        {
+          "id": 3,
+          "title": "Network Ingress (bytes/s)",
+          "type": "timeseries",
+          "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum by(pod) (rate(container_network_receive_bytes_total{namespace=\"trip-service-prod\"}[5m]))",
+              "legendFormat": "{{ pod }}"
+            }
+          ],
+          "fieldConfig": { "defaults": { "unit": "Bps" } }
+        },
+        {
+          "id": 4,
+          "title": "CPU Throttle Ratio",
+          "type": "timeseries",
+          "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "rate(container_cpu_cfs_throttled_seconds_total{namespace=\"trip-service-prod\"}[5m]) / rate(container_cpu_cfs_periods_total{namespace=\"trip-service-prod\"}[5m])",
+              "legendFormat": "{{ pod }} / {{ container }}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": { "unit": "percentunit",
+              "thresholds": { "mode": "absolute", "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 0.5 },
+                { "color": "red", "value": 0.8 }
+              ]}
+            }
+          }
+        },
+        {
+          "id": 5,
+          "title": "Active Pods by Namespace",
+          "type": "stat",
+          "gridPos": { "x": 0, "y": 16, "w": 8, "h": 6 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "count(kube_pod_status_phase{namespace=\"trip-service-prod\", phase=\"Running\"})",
+              "legendFormat": "Running Pods"
+            }
+          ],
+          "fieldConfig": { "defaults": { "unit": "short" } }
+        },
+        {
+          "id": 6,
+          "title": "Pending / Failed Pods",
+          "type": "stat",
+          "gridPos": { "x": 8, "y": 16, "w": 8, "h": 6 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "count(kube_pod_status_phase{namespace=\"trip-service-prod\", phase=~\"Pending|Failed\"})",
+              "legendFormat": "Pending/Failed"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": { "unit": "short", "color": { "mode": "thresholds" },
+              "thresholds": { "mode": "absolute", "steps": [
+                { "color": "green", "value": null },
+                { "color": "red", "value": 1 }
+              ]}
+            }
+          }
+        },
+        {
+          "id": 7,
+          "title": "Node Disk Usage",
+          "type": "bargauge",
+          "gridPos": { "x": 16, "y": 16, "w": 8, "h": 6 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "(node_filesystem_size_bytes{fstype!~\"tmpfs|overlay\"} - node_filesystem_avail_bytes{fstype!~\"tmpfs|overlay\"}) / node_filesystem_size_bytes{fstype!~\"tmpfs|overlay\"} * 100",
+              "legendFormat": "{{ instance }} {{ mountpoint }}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": { "unit": "percent",
+              "thresholds": { "mode": "absolute", "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 70 },
+                { "color": "red", "value": 85 }
+              ]}
+            }
+          }
+        }
+      ]
+    }

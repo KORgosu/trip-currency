@@ -1,0 +1,68 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: trip-service-kafka-rules
+  namespace: monitoring
+  labels:
+    app: kube-prometheus-stack
+    release: kube-prometheus-stack
+spec:
+  groups:
+  - name: kafka-consumer-lag
+    interval: 30s
+    rules:
+    - alert: KafkaConsumerGroupLagHigh
+      expr: |
+        sum by(consumergroup, topic) (
+          kafka_consumergroup_lag{namespace="trip-service-prod"}
+        ) > 1000
+      for: 5m
+      labels:
+        severity: warning
+        namespace: trip-service-prod
+      annotations:
+        summary: "Kafka consumer group {{ $labels.consumergroup }} lag is high"
+        description: "Consumer group {{ $labels.consumergroup }} on topic {{ $labels.topic }} has a lag of {{ $value }} messages for 5 minutes."
+
+    - alert: KafkaConsumerGroupLagCritical
+      expr: |
+        sum by(consumergroup, topic) (
+          kafka_consumergroup_lag{namespace="trip-service-prod"}
+        ) > 5000
+      for: 5m
+      labels:
+        severity: critical
+        namespace: trip-service-prod
+      annotations:
+        summary: "Kafka consumer group {{ $labels.consumergroup }} lag is critical"
+        description: "Consumer group {{ $labels.consumergroup }} on topic {{ $labels.topic }} has a lag of {{ $value }} messages. Consumers may be stalled."
+
+    - alert: KafkaBrokerDown
+      expr: |
+        kafka_brokers{namespace="trip-service-prod"} < 1
+      for: 1m
+      labels:
+        severity: critical
+        namespace: trip-service-prod
+      annotations:
+        summary: "Kafka broker is down"
+        description: "No Kafka brokers are reachable. All message processing has stopped."
+
+    - alert: KafkaConsumerGroupNoProgress
+      expr: |
+        delta(
+          sum by(consumergroup, topic) (
+            kafka_consumergroup_current_offset{namespace="trip-service-prod"}
+          )[10m:]
+        ) == 0
+          and
+        sum by(consumergroup, topic) (
+          kafka_consumergroup_lag{namespace="trip-service-prod"}
+        ) > 100
+      for: 10m
+      labels:
+        severity: critical
+        namespace: trip-service-prod
+      annotations:
+        summary: "Kafka consumer group {{ $labels.consumergroup }} is stalled"
+        description: "Consumer group {{ $labels.consumergroup }} on topic {{ $labels.topic }} has not committed any offsets in 10 minutes while lag > 100."

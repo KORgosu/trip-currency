@@ -1,0 +1,61 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: trip-service-security-rules
+  namespace: monitoring
+  labels:
+    app: kube-prometheus-stack
+    release: kube-prometheus-stack
+spec:
+  groups:
+  - name: pod-security
+    interval: 60s
+    rules:
+    - alert: AbnormalPodRestartSpike
+      expr: |
+        increase(kube_pod_container_status_restarts_total{namespace="trip-service-prod"}[1h]) > 5
+      for: 0m
+      labels:
+        severity: critical
+        namespace: trip-service-prod
+      annotations:
+        summary: "Abnormal restart spike in {{ $labels.pod }}"
+        description: "Container {{ $labels.container }} in pod {{ $labels.pod }} restarted {{ $value }} times in the last hour — possible attack or compromise."
+
+    - alert: ContainerCPUThrottling
+      expr: |
+        rate(container_cpu_cfs_throttled_seconds_total{namespace="trip-service-prod"}[5m])
+          / rate(container_cpu_cfs_periods_total{namespace="trip-service-prod"}[5m]) > 0.8
+      for: 15m
+      labels:
+        severity: warning
+        namespace: trip-service-prod
+      annotations:
+        summary: "Container {{ $labels.container }} CPU throttled"
+        description: "Container {{ $labels.container }} in pod {{ $labels.pod }} is CPU throttled {{ $value | humanizePercentage }} of the time for 15 minutes — review resource limits."
+
+    - alert: HighNetworkEgress
+      expr: |
+        sum by(pod, namespace) (
+          rate(container_network_transmit_bytes_total{namespace="trip-service-prod"}[5m])
+        ) > 10 * 1024 * 1024
+      for: 10m
+      labels:
+        severity: warning
+        namespace: trip-service-prod
+      annotations:
+        summary: "High egress from pod {{ $labels.pod }}"
+        description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} is transmitting more than 10 MB/s for 10 minutes — possible data exfiltration."
+
+    - alert: UnexpectedPrivilegedContainer
+      expr: |
+        kube_pod_container_info{namespace="trip-service-prod"}
+          unless on(pod, container, namespace)
+        kube_pod_container_status_running{namespace="trip-service-prod"} == 0
+      for: 0m
+      labels:
+        severity: critical
+        namespace: trip-service-prod
+      annotations:
+        summary: "Privileged container detected in {{ $labels.pod }}"
+        description: "A privileged container was detected in pod {{ $labels.pod }}. Investigate immediately."

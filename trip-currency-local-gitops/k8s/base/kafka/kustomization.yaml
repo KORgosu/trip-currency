@@ -6,3 +6,4 @@ resources:
 - kafka.yaml
 - zookeeper.yaml
 - kafka-ui.yaml
+- kafka-exporter.yaml

@@ -1,5 +1,5 @@
 # monitoring 네임스페이스의 Prometheus가 trip-service-prod 파드를 스크래핑할 수 있도록 허용
-# 대상: prometheus.io/scrape=true 어노테이션이 붙은 파드의 포트 8000
+# 대상: prometheus.io/scrape=true 어노테이션이 붙은 파드의 포트 8000, 8080, 9308
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -20,3 +20,5 @@ spec:
       port: 8000
     - protocol: TCP
       port: 8080
+    - protocol: TCP
+      port: 9308

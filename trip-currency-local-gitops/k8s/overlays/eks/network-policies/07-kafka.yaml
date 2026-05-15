@@ -30,6 +30,9 @@ spec:
     - podSelector:
         matchLabels:
           app: kafka-ui
+    - podSelector:
+        matchLabels:
+          app: kafka-exporter
     ports:
     - protocol: TCP
       port: 9092
