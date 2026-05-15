@@ -1,7 +1,5 @@
 # Trip Service 클러스터 구조 및 보안 점검 보고서
 
-> 최초 점검일시: 2026-05-14
-> 최종 업데이트: 2026-05-15
 > 클러스터: `trip-service-cluster` (EKS, ap-northeast-2)
 
 ---
@@ -22,7 +20,7 @@
 |------|------|----------|
 | 00-default-deny | Ingress+Egress | 전체 차단 (기본값) |
 | 01-allow-dns | Egress | 전 Pod → CoreDNS :53 |
-| 02-frontend | Ingress | VPC CIDR → :80 |
+| 02-frontend | Ingress | VPC CIDR → :8080 |
 | 03-currency | Ingress/Egress | ALB → :8000 / Aurora·Redis·Kafka·HTTPS |
 | 04-history | Ingress/Egress | ALB → :8000 / Aurora·DocDB·Redis·Kafka |
 | 05-ranking | Ingress/Egress | ALB → :8000 / DocDB·Redis·Kafka |
@@ -30,7 +28,7 @@
 | 07-kafka | Ingress/Egress | 내부 서비스 → :9092 / Zookeeper :2181 |
 | 08-kafka-ui | Ingress 완전 차단 | Egress: Kafka·Zookeeper만 |
 | 09-zookeeper | Ingress | kafka·kafka-ui → :2181만 |
-| 10-allow-prometheus-scrape | Ingress | monitoring ns → :8000/:80 |
+| 10-allow-prometheus-scrape | Ingress | monitoring ns → :8000/:8080 |
 
 **기대 효과**
 - **Lateral Movement 차단**: 특정 Pod 침해 시 다른 서비스로 이동 불가 — 피해 범위가 침해된 Pod 단일 서비스로 봉쇄됨
