@@ -1,7 +1,8 @@
 # service-dataingestor (CronJob):
 #   Ingress: 없음 (수신하는 서비스 없음)
 #   Egress:  Kafka(9092) → 수집 데이터 발행
-#            외부 HTTPS(443) → 환율 오픈 API 수집
+#            외부 HTTPS(443) → 환율 API 수집
+#            Aurora MySQL(3306), DocumentDB(27017), Redis(6379) → 데이터 저장
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -32,3 +33,13 @@ spec:
     ports:
     - protocol: TCP
       port: 443
+  - to:
+    - ipBlock:
+        cidr: 192.168.0.0/16
+    ports:
+    - protocol: TCP
+      port: 3306
+    - protocol: TCP
+      port: 27017
+    - protocol: TCP
+      port: 6379

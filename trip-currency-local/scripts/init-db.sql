@@ -165,7 +165,8 @@ VALUES
 ('RUB', '러시아 루블', 'Russian Ruble', 'RU', '러시아', 'Russia', '₽', 2, 66),
 ('MXN', '멕시코 페소', 'Mexican Peso', 'MX', '멕시코', 'Mexico', '$', 2, 67),
 ('ZAR', '남아프리카 공화국 랜드', 'South African Rand', 'ZA', '남아프리카 공화국', 'South Africa', 'R', 2, 68),
-('TRY', '터키 리라', 'Turkish Lira', 'TR', '터키', 'Turkey', '₺', 2, 69)
+('TRY', '터키 리라', 'Turkish Lira', 'TR', '터키', 'Turkey', '₺', 2, 69),
+('PLN', '폴란드 즐로티', 'Polish Zloty', 'PL', '폴란드', 'Poland', 'zł', 2, 70)
 ON DUPLICATE KEY UPDATE
     currency_name_ko = VALUES(currency_name_ko),
     currency_name_en = VALUES(currency_name_en),

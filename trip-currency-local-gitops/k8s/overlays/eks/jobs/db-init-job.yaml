@@ -1,0 +1,105 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-db-init
+  namespace: trip-service-prod
+spec:
+  podSelector:
+    matchLabels:
+      app: db-init
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - ipBlock:
+        cidr: 192.168.0.0/16
+    ports:
+    - protocol: TCP
+      port: 3306
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-init
+  namespace: trip-service-prod
+spec:
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app: db-init
+        job-type: db-init
+    spec:
+      restartPolicy: Never
+      serviceAccountName: sa-dataingestor
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: db-init
+        image: mysql:8.0
+        command: ["sh", "-c"]
+        args:
+        - |
+          mysql -h $MYSQL_HOST -P $MYSQL_PORT -u $MYSQL_USER -p$MYSQL_PASSWORD < /scripts/init-db.sql
+          echo "Exit code: $?"
+        env:
+        - name: MYSQL_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: trip-service-config
+              key: MYSQL_HOST
+        - name: MYSQL_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: trip-service-config
+              key: MYSQL_PORT
+        - name: MYSQL_USER
+          valueFrom:
+            configMapKeyRef:
+              name: trip-service-config
+              key: MYSQL_USER
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: trip-service-secrets
+              key: mysql-password
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
+        volumeMounts:
+        - name: sql-scripts
+          mountPath: /scripts
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: sql-scripts
+        configMap:
+          name: db-init-sql
+      - name: tmp
+        emptyDir: {}
