@@ -285,6 +285,7 @@ pod-security.kubernetes.io/warn: restricted
 | MEDIUM | seccompProfile 미설정 | ✅ 조치완료 (전 워크로드 RuntimeDefault) |
 | MEDIUM | frontend root 실행 | ✅ 조치완료 (nginx-unprivileged:alpine, uid 101, :8080) |
 | MEDIUM | Pod Security Admission 미적용 | ✅ 조치완료 (enforce=restricted, trip-service-prod) |
+| MEDIUM | Kubernetes RBAC 미구성 | ✅ 조치완료 (전용 SA + automountServiceAccountToken: false) |
 | MEDIUM | kafka-ui 무인증 접근 | ⚠️ 부분조치 (NP 차단, Auth 미설정) |
 | MEDIUM | HPA 메트릭 미작동 | ⚠️ 부분조치 (Prometheus 설치, Adapter 미설치) |
 | MEDIUM | Redis 인증·암호화 미설정 | ❌ 미조치 (클러스터 재생성 필요) |

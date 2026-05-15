@@ -36,6 +36,8 @@ spec:
             prometheus.io/path: "/metrics"
         spec:
           restartPolicy: OnFailure
+          serviceAccountName: sa-dataingestor
+          automountServiceAccountToken: false
           securityContext:
             runAsNonRoot: true
             runAsUser: 1000
