@@ -64,7 +64,7 @@
 |------|-----|
 | endpointPublicAccess | true |
 | endpointPrivateAccess | true |
-| publicAccessCidrs | `222.109.238.0/24` (운영 대역만 허용) |
+| publicAccessCidrs | `비공개` (사내/운영 고정 IP 대역 `/24`만 허용) |
 
 **기대 효과**
 - **자격증명 탈취 시나리오 무력화**: kubectl 비밀번호·토큰이 유출되어도 허용 CIDR 외부에서는 API 서버에 TCP 연결 자체가 불가
@@ -324,7 +324,7 @@ pod-security.kubernetes.io/warn: restricted
 |------|------|------|
 | CRITICAL | NetworkPolicy 미설정 | ✅ 조치완료 |
 | HIGH | 컨트롤 플레인 로깅 비활성화 | ✅ 조치완료 |
-| HIGH | API 서버 0.0.0.0/0 허용 | ✅ 조치완료 (222.109.238.0/24) |
+| HIGH | API 서버 0.0.0.0/0 허용 | ✅ 조치완료 (허용 CIDR 비공개) |
 | HIGH | NLB 중복 노출 | ✅ 조치완료 |
 | HIGH | GuardDuty 미활성화 | ✅ 조치완료 |
 | MEDIUM | securityContext 미설정 | ✅ 조치완료 (runAsNonRoot·readOnlyRootFilesystem·capabilities.drop) |
@@ -410,7 +410,7 @@ pod-security.kubernetes.io/warn: restricted
                  │    ├─ /api/v1/rankings    → service-ranking:8000  (ClusterIP)
                  │    └─ /health             → service-currency:8000 (ClusterIP)
 
-※ 과거 NLB(k8s-tripserv-servicef-f6e2e6084e) 제거됨 — HTTP 평문 우회 경로 없음
+※ 과거 NLB(이름 비공개) 제거됨 — HTTP 평문 우회 경로 없음
 ※ ACM 인증서 SAN: 2025teamproject.store, *.2025teamproject.store (별도 발급 불필요)
 ```
 
@@ -548,12 +548,12 @@ External Secrets Operator를 통해 AWS Secrets Manager에서 자동 동기화 (
 ### ✅ [HIGH → 조치완료] EKS API 서버 공개 엔드포인트가 0.0.0.0/0 허용
 
 - **조치일**: 2026-05-15
-- **조치 내용**: `publicAccessCidrs` 0.0.0.0/0 → `222.109.238.0/24` 제한
+- **조치 내용**: `publicAccessCidrs` 0.0.0.0/0 → 사내/운영 고정 대역(비공개 `/24`)으로 제한
   ```bash
   aws eks update-cluster-config --name trip-service-cluster \
-    --resources-vpc-config endpointPublicAccess=true,endpointPrivateAccess=true,publicAccessCidrs="222.109.238.0/24"
+    --resources-vpc-config endpointPublicAccess=true,endpointPrivateAccess=true,publicAccessCidrs="<YOUR_ALLOWED_CIDR>"
   ```
-- **결과**: 전 세계 임의 접근 차단. 해당 /24 대역 외부에서는 EKS API 서버 인증 시도 불가
+- **결과**: 전 세계 임의 접근 차단. 허용 CIDR 외부에서는 EKS API 서버 인증 시도 불가
 - **주의**: 운영 IP 대역 변경 시 위 명령으로 재설정 필요
 
 ---
@@ -561,7 +561,7 @@ External Secrets Operator를 통해 AWS Secrets Manager에서 자동 동기화 (
 ### ✅ [HIGH → 조치완료] service-frontend가 NLB로도 직접 노출됨
 
 - **조치일**: 2026-05-15
-- **조치 내용**: service-frontend 타입 `LoadBalancer` → `ClusterIP` 변경. NLB(k8s-tripserv-servicef-f6e2e6084e) 자동 삭제 완료
+- **조치 내용**: service-frontend 타입 `LoadBalancer` → `ClusterIP` 변경. NLB(식별자 비공개) 자동 삭제 완료
 - **결과**: 외부 접근 경로가 ALB(HTTPS) 단일 진입점으로 통일. HTTP 평문 우회 경로 제거
 
 ---
@@ -707,7 +707,7 @@ External Secrets Operator를 통해 AWS Secrets Manager에서 자동 동기화 (
 | Calico CNI | Tigera Operator v3.29.1, AmazonVPC 모드 (policy-engine-only) |
 | NetworkPolicy | 10개 정책, default-deny 기반 최소 권한 |
 | EKS 컨트롤 플레인 로깅 | api/audit/authenticator/controllerManager/scheduler 전체 활성화 |
-| EKS API 서버 CIDR | 0.0.0.0/0 → 222.109.238.0/24 제한 |
+| EKS API 서버 CIDR | 0.0.0.0/0 → 사내 허용 대역(비공개)으로 제한 |
 | kube-prometheus-stack | Prometheus + Grafana + AlertManager + node-exporter + kube-state-metrics |
 | Grafana 외부 접근 | https://grafana.2025teamproject.store (ALB IngressGroup 공유, ACM *.2025teamproject.store) |
 | ALB IngressGroup | group.name: trip-service — 단일 ALB로 trip-service-prod + monitoring 네임스페이스 Ingress 통합 |
@@ -735,7 +735,7 @@ External Secrets Operator를 통해 AWS Secrets Manager에서 자동 동기화 (
 | Kafka 토픽 초기화 Job 추가 | kafka-init-job.yaml — 7개 토픽 생성 매니페스트 |
 | init-db.sql PLN 추가 | currencies 마스터에 폴란드 즐로티 추가 |
 | frontend 포트 수정 (80→8080) | nginx-unprivileged(uid 101)는 비특권 사용자라 :80 바인딩 불가(NET_BIND_SERVICE 없음). Deployment·Service·NetworkPolicy가 :80으로 설정되어 ALB→Pod 트래픽 차단(504). containerPort·targetPort·NetworkPolicy·probe 포트 모두 :8080으로 정정 |
-| EKS 노드 SG 8080 inbound 추가 | ALB SG(sg-0bf0f0afb27f49980) → EKS 노드 SG(sg-058812b4fd626a469) TCP 8080 inbound 규칙 추가 — frontend 포트 8080 변경 후 ALB Target health 정상화 |
+| EKS 노드 SG 8080 inbound 추가 | ALB SG → EKS 노드 SG(식별자 비공개) TCP 8080 inbound 규칙 추가 — frontend 포트 8080 변경 후 ALB Target health 정상화 |
 | NetworkPolicy ArgoCD 통합 (12개) | `k8s/overlays/eks/network-policies/kustomization.yaml` 생성, EKS overlay kustomization에 `- network-policies/` 추가 → 12개 NetworkPolicy 전체 ArgoCD 자동 관리 (기존 수동 kubectl apply 방식 대체) |
 | ArgoCD ignoreDifferences 확장 | ConfigMap(MYSQL_HOST·MONGODB_HOST·REDIS_HOST), ExternalSecret(spec.dataFrom·spec.data·metadata.annotations), Deployment(kubectl.kubernetes.io/restartedAt) 3개 항목 추가 — phantom OutOfSync 및 rollout restart 무한 루프 해결 |
 | ConfigMap base HOST 키 제거 | base/configmap.yaml에서 MYSQL_HOST·MONGODB_HOST·REDIS_HOST 삭제 → ArgoCD가 해당 필드를 소유하지 않아 sync 후에도 kubectl patch 값이 보존됨 (ServerSideApply 소유권 원리 적용) |
@@ -747,3 +747,5 @@ External Secrets Operator를 통해 AWS Secrets Manager에서 자동 동기화 (
 | DynamoDBHelper 초기화 버그 수정 | `__init__`이 positional arg를 받지 않아 `DynamoDBHelper(table_name)` 호출 시 TypeError 발생 → `table_name: str = None` 파라미터 추가 |
 | service-currency structlog 전환 | `logging.getLogger()` → `shared.logging.get_logger()` 교체 — Kafka 메시지 핸들러에서 structlog kwargs 사용 시 `Logger._log() got an unexpected keyword argument 'currency'` 오류 해결 |
 | DocumentDB retryWrites=false | 전 서비스 MongoDB 연결 문자열에 `&retryWrites=false` 추가 (package-shared 5개 + mongodb_service.py 1개) — DocumentDB가 retryWrites 미지원(code 301)으로 ranking 클릭 시 500 오류 발생 해결 |
+| PodNotReady 알림 CronJob 오탐 제거 | `prometheus-rules-stability.yaml` PodNotReady expr에 `unless on(pod,namespace) kube_pod_status_phase{phase="Succeeded"}==1` 추가 — 정상 완료된 dataingestor CronJob 파드가 5분마다 WARNING 알림 유발하던 오탐 해결 |
+| TargetDown 알림 오탐 제거 | `kube-prometheus-stack-values.yaml` additionalScrapeConfigs에 `__meta_kubernetes_pod_phase drop Succeeded\|Failed` relabel 규칙 추가 — Completed 상태 파드(db-init, pln-insert, dataingestor-cronjob)를 스크레이프 대상에서 제외하여 TargetDown false positive 해결 |
