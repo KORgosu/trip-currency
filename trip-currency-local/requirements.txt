@@ -33,7 +33,7 @@ numpy==1.24.4                  # Numerical computing
 
 # ===== Security & Auth =====
 cryptography==41.0.7           # Cryptographic functions
-python-jose[cryptography]==3.3.0  # JWT handling
+python-jose[cryptography]==3.4.0  # JWT handling
 
 # ===== Utilities =====
 python-dateutil==2.8.2         # Date/time utilities
