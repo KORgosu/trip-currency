@@ -4,19 +4,19 @@ metadata:
   name: trip-service-config
 data:
   # Database Configuration
-  MYSQL_HOST: "service-mysql"
+  # MYSQL_HOST: git에 저장 불가 (보안) — 배포 후 kubectl patch로 주입
   MYSQL_PORT: "3306"
   MYSQL_DATABASE: "currency_db"
   MYSQL_USER: "trip_user"
 
   # MongoDB Configuration
-  MONGODB_HOST: "service-mongodb"
+  # MONGODB_HOST: git에 저장 불가 (보안) — 배포 후 kubectl patch로 주입
   MONGODB_PORT: "27017"
   MONGODB_DATABASE: "currency_db"
   MONGODB_USER: "trip_user"
 
   # Redis Configuration
-  REDIS_HOST: "service-redis"
+  # REDIS_HOST: git에 저장 불가 (보안) — 배포 후 kubectl patch로 주입
   REDIS_PORT: "6379"
 
   # Kafka Configuration
