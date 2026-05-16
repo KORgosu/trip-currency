@@ -49,9 +49,7 @@ spec:
 
     - alert: UnexpectedPrivilegedContainer
       expr: |
-        kube_pod_container_info{namespace="trip-service-prod"}
-          unless on(pod, container, namespace)
-        kube_pod_container_status_running{namespace="trip-service-prod"} == 0
+        container_spec_privileged{namespace="trip-service-prod"} == 1
       for: 0m
       labels:
         severity: critical
