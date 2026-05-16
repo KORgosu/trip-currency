@@ -49,5 +49,6 @@ env/
 *.egg-info/
 .claude/
 \#*.txt
+KISA.md
 jenkins-setup/keys/
 jenkins-setup/*.txt
