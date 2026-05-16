@@ -50,5 +50,9 @@ env/
 .claude/
 \#*.txt
 KISA.md
+Troubleshooting.md
 jenkins-setup/keys/
 jenkins-setup/*.txt
+
+# Jenkins SBOM 산출물 (ECR 계정 ID·이미지 digest 포함)
+jenkins-setup/SBOM_file/
