@@ -749,3 +749,4 @@ External Secrets Operator를 통해 AWS Secrets Manager에서 자동 동기화 (
 | DocumentDB retryWrites=false | 전 서비스 MongoDB 연결 문자열에 `&retryWrites=false` 추가 (package-shared 5개 + mongodb_service.py 1개) — DocumentDB가 retryWrites 미지원(code 301)으로 ranking 클릭 시 500 오류 발생 해결 |
 | PodNotReady 알림 CronJob 오탐 제거 | `prometheus-rules-stability.yaml` PodNotReady expr에 `unless on(pod,namespace) kube_pod_status_phase{phase="Succeeded"}==1` 추가 — 정상 완료된 dataingestor CronJob 파드가 5분마다 WARNING 알림 유발하던 오탐 해결 |
 | TargetDown 알림 오탐 제거 | `kube-prometheus-stack-values.yaml` additionalScrapeConfigs에 `__meta_kubernetes_pod_phase drop Succeeded\|Failed` relabel 규칙 추가 — Completed 상태 파드(db-init, pln-insert, dataingestor-cronjob)를 스크레이프 대상에서 제외하여 TargetDown false positive 해결 |
+| Security 대시보드 phase 쿼리 오류 수정 | `kube_pod_status_phase` 쿼리에 `== 1` 조건 누락 — phase 레이블만 필터하면 값 0인 시계열까지 집계되어 "Pending/Failed Pods"가 34, "Active Pods"가 실제보다 과다 표시되던 버그 수정 (`== 1` 및 `or vector(0)` 추가) |
