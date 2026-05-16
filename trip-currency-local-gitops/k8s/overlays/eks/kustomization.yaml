@@ -18,7 +18,7 @@ patches:
   patch: |-
     - op: replace
       path: /spec/template/spec/containers/0/image
-      value: 716773066105.dkr.ecr.ap-northeast-2.amazonaws.com/service-frontend:EKS-7
+      value: 716773066105.dkr.ecr.ap-northeast-2.amazonaws.com/service-frontend:EKS-8
     - op: replace
       path: /spec/template/spec/containers/0/imagePullPolicy
       value: Always
@@ -29,7 +29,7 @@ patches:
   patch: |-
     - op: replace
       path: /spec/template/spec/containers/0/image
-      value: 716773066105.dkr.ecr.ap-northeast-2.amazonaws.com/service-currency:EKS-7
+      value: 716773066105.dkr.ecr.ap-northeast-2.amazonaws.com/service-currency:EKS-8
     - op: replace
       path: /spec/template/spec/containers/0/imagePullPolicy
       value: Always
@@ -40,7 +40,7 @@ patches:
   patch: |-
     - op: replace
       path: /spec/template/spec/containers/0/image
-      value: 716773066105.dkr.ecr.ap-northeast-2.amazonaws.com/service-history:EKS-7
+      value: 716773066105.dkr.ecr.ap-northeast-2.amazonaws.com/service-history:EKS-8
     - op: replace
       path: /spec/template/spec/containers/0/imagePullPolicy
       value: Always
@@ -51,7 +51,7 @@ patches:
   patch: |-
     - op: replace
       path: /spec/template/spec/containers/0/image
-      value: 716773066105.dkr.ecr.ap-northeast-2.amazonaws.com/service-ranking:EKS-7
+      value: 716773066105.dkr.ecr.ap-northeast-2.amazonaws.com/service-ranking:EKS-8
     - op: replace
       path: /spec/template/spec/containers/0/imagePullPolicy
       value: Always
@@ -62,7 +62,7 @@ patches:
   patch: |-
     - op: replace
       path: /spec/jobTemplate/spec/template/spec/containers/0/image
-      value: 716773066105.dkr.ecr.ap-northeast-2.amazonaws.com/service-dataingestor:EKS-7
+      value: 716773066105.dkr.ecr.ap-northeast-2.amazonaws.com/service-dataingestor:EKS-8
     - op: replace
       path: /spec/jobTemplate/spec/template/spec/containers/0/imagePullPolicy
       value: Always
