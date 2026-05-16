@@ -71,7 +71,7 @@
               │  │                                                      │
               │  │  [trip-service-prod]        NetworkPolicy: 적용됨    │
               │  │                             PSA: enforce=restricted  │
-              │  │  service-frontend  (ClusterIP :8080)                │
+              │  │  service-frontend  (ClusterIP :80)                 │
               │  │  service-currency  (ClusterIP :8000)                │
               │  │  service-history   (ClusterIP :8000)                │
               │  │  service-ranking   (ClusterIP :8000)                │
@@ -156,8 +156,8 @@ trip-currency-local-gitops/
 │   │       │   └── kustomization.yaml
 │   │       └── frontend/
 │   │           ├── serviceaccount.yaml    # sa-frontend (automountToken: false)
-│   │           ├── deployment.yaml        # nginx-unprivileged:alpine, uid 101, :8080
-│   │           ├── service.yaml           # port 80 → targetPort 8080
+│   │           ├── deployment.yaml        # nginx:custom, uid 101, :80             
+│   │           ├── service.yaml           # port 80 → targetPort 80  
 │   │           ├── hpa.yaml
 │   │           ├── configmap.yaml         # api-base-url: https://2025teamproject.store
 │   │           ├── ingress.yaml           # NGINX Ingress (로컬 K8s용)
@@ -200,7 +200,7 @@ trip-currency-local-gitops/
 │           └── network-policies/
 │               ├── 00-default-deny.yaml
 │               ├── 01-allow-dns.yaml
-│               ├── 02-frontend.yaml       # VPC CIDR → :8080
+│               ├── 02-frontend.yaml       # VPC CIDR → :80  
 │               ├── 03-currency.yaml
 │               ├── 04-history.yaml
 │               ├── 05-ranking.yaml
@@ -352,7 +352,7 @@ pod-security.kubernetes.io/warn: restricted
 | zookeeper | cp-zookeeper:7.4.0 | ✅ uid 1000 | - | RuntimeDefault |
 | kafka-ui | kafka-ui:latest | ✅ uid 1000 | - | RuntimeDefault |
 
-> frontend는 `nginx:alpine`(root 필수, :80) 대신 `nginxinc/nginx-unprivileged:alpine`(uid 101, :8080)을 사용합니다.
+> frontend는 `nginx:alpine`(root 필수) 대신 `nginxinc/nginx-unprivileged:alpine`(uid 101, :80)을 사용합니다.
 
 ### Kubernetes RBAC (인-클러스터)
 
@@ -483,10 +483,10 @@ kubectl apply -f k8s/overlays/eks/network-policies/
 |------|------|
 | 00-default-deny.yaml | 기본 Ingress/Egress 전체 차단 |
 | 01-allow-dns.yaml | 모든 Pod → CoreDNS :53 허용 |
-| 02-frontend.yaml | VPC CIDR → frontend :8080 |
+| 02-frontend.yaml | VPC CIDR → frontend :80 |
 | 03-currency.yaml | ALB → :8000; egress: Aurora/DocDB/Redis/Kafka/외부 HTTPS |
 | 04-history.yaml | ALB → :8000; egress: Aurora/DocDB/Redis/Kafka |
-| 05-ranking.yaml | ALB → :8000; egress: DocDB/Redis/Kafka |
+| 05-ranking.yaml | ALB → :8000; egress: DocDB:27017/Redis/Kafka |
 | 06-dataingestor.yaml | ingress 없음; egress: Kafka/Aurora:3306/DocDB:27017/Redis:6379/외부 HTTPS |
 | 07-kafka.yaml | 내부 서비스 + kafka-exporter → :9092; egress: Zookeeper :2181 / inter-broker :9093 |
 | 08-kafka-ui.yaml | ingress 완전 차단; egress: Kafka/Zookeeper |
@@ -702,3 +702,31 @@ aws secretsmanager put-secret-value \
 | Redis AUTH + TLS 활성화 | MEDIUM | ElastiCache 재생성 필요 (in-place 변경 불가) |
 | latest 태그 고정 | MEDIUM | kafka-ui 등 외부 이미지 버전 고정 필요 |
 | Kafka StatefulSet + PVC | MEDIUM | 단일 레플리카 + PVC 없음 → 재시작 시 메시지 유실 |
+
+---
+
+## Ranking Service 구성
+
+### 데이터 저장소 (DocumentDB)
+
+`service-ranking`은 클릭 기반 여행지 랭킹 서비스로, DynamoDB 대신 DocumentDB를 직접 사용합니다.
+
+| 컬렉션 | 용도 |
+|--------|------|
+| `country_clicks` | 나라별 누적·일별 클릭 수 (실시간 증가) |
+| `click_history` | 일별 클릭 이력 (daily reset 시 스냅샷) |
+| `ranking_results` | 기간별 랭킹 결과 upsert (period가 PK) |
+
+- **엔드포인트**: `trip-docdb-cluster.cluster-cxiuq4kag9i2.ap-northeast-2.docdb.amazonaws.com:27017`
+- **DB**: `currency_db` (MongoDB 호환 motor 드라이버 사용)
+- **일별 리셋**: 매일 자정 KST 스케줄러가 `country_clicks` 일별 카운터를 초기화하고 `click_history`에 스냅샷 저장
+
+### 주요 API
+
+| 메서드 | 경로 | 설명 |
+|--------|------|------|
+| GET | `/api/v1/rankings` | 현재 랭킹 조회 (DocumentDB `country_clicks`) |
+| POST | `/api/v1/rankings/click` | 나라 클릭 기록 → `country_clicks` 증가 |
+| POST | `/api/v1/rankings/update` | 복수 나라 클릭 일괄 증가 |
+| POST | `/api/v1/rankings/store` | 랭킹 결과 저장 (`ranking_results` upsert) |
+| GET | `/api/v1/rankings/store/{period}` | 기간별 랭킹 결과 조회 |

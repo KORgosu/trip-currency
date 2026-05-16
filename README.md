@@ -20,7 +20,7 @@
 |------|------|----------|
 | 00-default-deny | Ingress+Egress | 전체 차단 (기본값) |
 | 01-allow-dns | Egress | 전 Pod → CoreDNS :53 |
-| 02-frontend | Ingress | VPC CIDR → :8080 |
+| 02-frontend | Ingress | VPC CIDR → :80 |
 | 03-currency | Ingress/Egress | ALB → :8000 / Aurora·Redis·Kafka·HTTPS |
 | 04-history | Ingress/Egress | ALB → :8000 / Aurora·DocDB·Redis·Kafka |
 | 05-ranking | Ingress/Egress | ALB → :8000 / DocDB·Redis·Kafka |
@@ -227,7 +227,7 @@ Docker Build & Push (ECR)
 | dataingestor | ✅ (uid 1000) | ✅ | false | ALL drop | RuntimeDefault |
 
 `readOnlyRootFilesystem` 적용 서비스는 emptyDir 볼륨으로 쓰기 경로 확보 (`/tmp`, `/app/logs`, nginx 임시 경로).
-frontend는 `nginx:alpine`(root 필수) 대신 `nginxinc/nginx-unprivileged:alpine`(uid 101, :8080)으로 전환하여 `runAsNonRoot` 및 `NET_BIND_SERVICE` 예외 없이 PSA restricted 완전 준수.
+frontend는 `nginx:alpine`(root 필수) 대신 `nginxinc/nginx-unprivileged:alpine`(uid 101, :80)으로 전환하여 `runAsNonRoot` 및 `NET_BIND_SERVICE` 예외 없이 PSA restricted 완전 준수.
 
 **PSA 네임스페이스 레이블 (`k8s/overlays/eks/namespace.yaml`)**
 ```yaml
@@ -329,7 +329,7 @@ pod-security.kubernetes.io/warn: restricted
 | HIGH | GuardDuty 미활성화 | ✅ 조치완료 |
 | MEDIUM | securityContext 미설정 | ✅ 조치완료 (runAsNonRoot·readOnlyRootFilesystem·capabilities.drop) |
 | MEDIUM | seccompProfile 미설정 | ✅ 조치완료 (전 워크로드 RuntimeDefault) |
-| MEDIUM | frontend root 실행 | ✅ 조치완료 (nginx-unprivileged:alpine, uid 101, :8080) |
+| MEDIUM | frontend root 실행 | ✅ 조치완료 (nginx-unprivileged:alpine, uid 101, :80) |
 | MEDIUM | Pod Security Admission 미적용 | ✅ 조치완료 (enforce=restricted, trip-service-prod) |
 | MEDIUM | Kubernetes RBAC 미구성 | ✅ 조치완료 (전용 SA + automountServiceAccountToken: false) |
 | MEDIUM | kafka-ui 무인증 접근 | ⚠️ 부분조치 (NP 차단, Auth 미설정) |
@@ -574,10 +574,10 @@ External Secrets Operator를 통해 AWS Secrets Manager에서 자동 동기화 (
   - 컨테이너 수준: `allowPrivilegeEscalation: false`, `readOnlyRootFilesystem: true`, `capabilities.drop: ALL`
 - **조치 내용 (2차, 2026-05-15)**: PSA `restricted` 완전 준수를 위한 추가 조치
   - **전 워크로드**: Pod 수준 `seccompProfile: {type: RuntimeDefault}` 추가 (PSA restricted 필수 요건)
-  - **frontend**: `nginx:alpine`(root 필수, :80) → `nginxinc/nginx-unprivileged:alpine`(uid 101, :8080)으로 이미지 전환
+  - **frontend**: `nginx:alpine`(root 필수, :80) → `nginxinc/nginx-unprivileged:alpine`(uid 101, :80)으로 이미지 전환
     - `runAsNonRoot: true`, `runAsUser: 101` 적용 가능
-    - `NET_BIND_SERVICE` capability 제거 (포트 8080은 비특권 포트)
-    - Service `targetPort: 8080`, NetworkPolicy `port: 8080`으로 연동 수정
+    - `NET_BIND_SERVICE` capability 제거 (포트 80은 비특권 포트)
+    - Service `targetPort: 80`, NetworkPolicy `port: 80`으로 연동 수정
   - **kafka/zookeeper/kafka-ui**: 데이터 기록 필요로 `readOnlyRootFilesystem` 미적용 (PSA restricted 비필수 항목)
   - **Namespace**: `pod-security.kubernetes.io/enforce: restricted` 레이블 적용 → 기준 미달 Pod 배포 차단
 - **결과**: 전 서비스 PSA restricted 완전 준수. API 서버 수준에서 비준수 Pod 배포 자체를 차단
@@ -674,6 +674,32 @@ External Secrets Operator를 통해 AWS Secrets Manager에서 자동 동기화 (
 
 ---
 
+### ✅ [운영 버그 → 조치완료] frontend 포트 8080 → 80 수정 (504 Gateway Timeout)
+
+- **조치일**: 2026-05-16
+- **원인**: `nginx-unprivileged` 이미지는 :80에서 Listen하지만 Deployment(containerPort), Service(targetPort), NetworkPolicy(ingress port)가 모두 :8080으로 설정되어 있어 ALB → Pod 트래픽이 차단됨
+- **조치 내용**:
+  - `k8s/base/services/frontend/deployment.yaml`: `containerPort`, livenessProbe/readinessProbe `port` → 80
+  - `k8s/base/services/frontend/service.yaml`: `targetPort` → 80
+  - `k8s/overlays/eks/network-policies/02-frontend.yaml`: ingress `port` → 80
+- **결과**: 신규 Pod 즉시 1/1 Running, 504 오류 해소
+
+---
+
+### ✅ [운영 버그 → 조치완료] service-ranking DocumentDB 전환 및 버그 수정
+
+- **조치일**: 2026-05-16
+- **배경**: EKS 환경에서 DynamoDB 테이블이 존재하지 않고 IRSA도 미설정 상태. `DynamoDBHelper` 코드가 Mock 구현이었음에도 인수 전달 방식 오류로 초기화 자체가 실패
+- **조치 내용**:
+  1. **DynamoDBHelper init 버그** — `DynamoDBHelper(table_name)` 호출 시 `__init__()` 파라미터 없어 TypeError → `table_name: str = None` 추가
+  2. **스케줄러 logger 버그** — `logger.info(..., correlation_id=...)` 형태의 keyword arg가 표준 Python logging에서 지원되지 않아 자정 daily reset 크래시 → f-string 인라인 방식으로 변경
+  3. **ranking_provider, selection_recorder** — `initialize()` 메서드에서 `DynamoDBHelper` 완전 제거, DocumentDB 모드로 전환
+  4. **mongodb_service.py** — `ranking_results` 컬렉션 및 `upsert_ranking_result` / `get_ranking_result` / `list_ranking_results` 메서드 추가
+  5. **main.py** — `/api/v1/rankings/update` 등 스토어 엔드포인트가 DocumentDB `country_clicks` / `ranking_results` 컬렉션을 직접 사용하도록 재구현
+- **결과**: 신규 Pod 기동 로그 — "SelectionRecorder initialized (DocumentDB mode)", "MongoDB connected successfully", 스케줄러 정상 기동
+
+---
+
 ## 6. 주요 인프라 변경 이력
 
 | 항목 | 내용 |
@@ -708,3 +734,7 @@ External Secrets Operator를 통해 AWS Secrets Manager에서 자동 동기화 (
 | DB 초기화 Job 추가 | db-init-job.yaml — Aurora MySQL 스키마·통화 마스터(70개) 초기화 |
 | Kafka 토픽 초기화 Job 추가 | kafka-init-job.yaml — 7개 토픽 생성 매니페스트 |
 | init-db.sql PLN 추가 | currencies 마스터에 폴란드 즐로티 추가 |
+| frontend 포트 수정 (8080→80) | nginx-unprivileged 이미지가 :80을 사용함에도 Deployment·Service·NetworkPolicy가 :8080으로 잘못 설정되어 504 Gateway Timeout 발생 → 모두 :80으로 정정 |
+| service-ranking DocumentDB 전환 | DynamoDB Mock 제거, DocumentDB(motor) 직접 연결로 전환. country_clicks·click_history·ranking_results 컬렉션 사용 |
+| ranking 스케줄러 버그 수정 | 자정 KST daily reset 시 Python logger.info() keyword argument 오류로 크래시 → f-string 임베드 방식으로 변경 |
+| DynamoDBHelper 초기화 버그 수정 | `__init__`이 positional arg를 받지 않아 `DynamoDBHelper(table_name)` 호출 시 TypeError 발생 → `table_name: str = None` 파라미터 추가 |

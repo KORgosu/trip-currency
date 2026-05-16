@@ -1,37 +1,72 @@
-// 운영환경용 Jenkins 파이프라인
-// 이 파일은 운영 PC의 Jenkins에서 사용합니다.
+// EKS 운영 GitOps CI 파이프라인
+// - trip-currency-local: 빌드·테스트·ECR push
+// - trip-currency-local-gitops/k8s/overlays/eks: 이미지 태그 갱신 → Argo CD sync
+//
+// Jenkins 전역 환경 변수: AWS_ACCOUNT_ID (필수)
+// Credentials: github-token (GitOps 커밋용, 모노레포/별도 레포 공통)
 
 pipeline {
     agent { label 'ec2-worker-ubuntu' }
-    
-    environment {
-        // Docker Registry 설정 (운영환경용) - Docker Hub는 기본 레지스트리 사용
-        DOCKERHUB_USERNAME = "${env.DOCKER_HUB_USERNAME}"  // Jenkins 환경 변수에서 가져옴
-        IMAGE_NAME = 'service'
 
-        // AWS ECR 설정
+    environment {
         AWS_REGION = 'ap-northeast-2'
-        ECR_REGISTRY = "${env.AWS_ACCOUNT_ID}.dkr.ecr.ap-northeast-2.amazonaws.com"  // Jenkins 환경 변수에서 가져옴
-        
-        // 환경별 이미지 태그
-        DEV_TAG = "dev-${env.BUILD_NUMBER}"
+        ECR_REGISTRY = "${env.AWS_ACCOUNT_ID}.dkr.ecr.ap-northeast-2.amazonaws.com"
         PROD_TAG = "prod-${env.BUILD_NUMBER}"
+        GITOPS_OVERLAY = 'k8s/overlays/eks'
+        // 별도 GitOps 레포 clone 시 사용 (모노레포에 gitops 폴더가 없을 때)
+        GITOPS_REPO_URL = 'https://github.com/KORgosu/trip-currency-local-gitops.git'
+        GITOPS_BRANCH = 'main'
     }
-    
+
     stages {
         stage('Checkout') {
             steps {
-                echo "📁 소스 코드 체크아웃 중..."
+                echo '📁 소스 코드 체크아웃 중...'
                 checkout scm
             }
         }
-        
+
+        stage('Init Workspace Paths') {
+            steps {
+                script {
+                    if (fileExists('trip-currency-local/frontend')) {
+                        env.APP_ROOT = 'trip-currency-local'
+                        env.GITOPS_ROOT = 'trip-currency-local-gitops'
+                        env.GITOPS_IN_MONOREPO = 'true'
+                    } else if (fileExists('frontend')) {
+                        env.APP_ROOT = '.'
+                        env.GITOPS_ROOT = 'trip-currency-local-gitops'
+                        env.GITOPS_IN_MONOREPO = fileExists("${env.GITOPS_ROOT}/${env.GITOPS_OVERLAY}/kustomization.yaml") ? 'true' : 'false'
+                    } else {
+                        error('앱 소스를 찾을 수 없습니다. job SCM이 trip-currency-local 또는 모노레포 루트인지 확인하세요.')
+                    }
+
+                    if (env.GITOPS_IN_MONOREPO != 'true') {
+                        echo 'ℹ️ 워크스페이스에 GitOps 폴더 없음 — 별도 GitOps 레포 clone 모드 사용'
+                    }
+
+                    echo "APP_ROOT=${env.APP_ROOT}, GITOPS_ROOT=${env.GITOPS_ROOT}, GITOPS_IN_MONOREPO=${env.GITOPS_IN_MONOREPO}"
+                    echo "ECR_REGISTRY=${env.ECR_REGISTRY}, PROD_TAG=${env.PROD_TAG}"
+                }
+            }
+        }
+
+        stage('ECR Login') {
+            steps {
+                withAWS(region: "${AWS_REGION}") {
+                    sh """
+                        aws ecr get-login-password --region ${AWS_REGION} | \
+                            docker login --username AWS --password-stdin ${ECR_REGISTRY}
+                    """
+                }
+            }
+        }
+
         stage('Build & Test') {
             parallel {
                 stage('Frontend Build & Test') {
                     steps {
-                        echo "🔨 Frontend 빌드 및 테스트 중..."
-                        dir('frontend') {
+                        dir("${APP_ROOT}/frontend") {
                             sh '''
                                 npm install --legacy-peer-deps
                                 npm run build
@@ -40,11 +75,10 @@ pipeline {
                         }
                     }
                 }
-                
+
                 stage('Currency Service Test') {
                     steps {
-                        echo "🔨 Currency Service 테스트 중..."
-                        dir('service-currency') {
+                        dir("${APP_ROOT}/service-currency") {
                             sh '''
                                 if [ -d "tests" ]; then
                                     python -m pytest tests/ -v
@@ -55,11 +89,10 @@ pipeline {
                         }
                     }
                 }
-                
+
                 stage('History Service Test') {
                     steps {
-                        echo "🔨 History Service 테스트 중..."
-                        dir('service-history') {
+                        dir("${APP_ROOT}/service-history") {
                             sh '''
                                 if [ -d "tests" ]; then
                                     python -m pytest tests/ -v
@@ -70,11 +103,10 @@ pipeline {
                         }
                     }
                 }
-                
+
                 stage('Ranking Service Test') {
                     steps {
-                        echo "🔨 Ranking Service 테스트 중..."
-                        dir('service-ranking') {
+                        dir("${APP_ROOT}/service-ranking") {
                             sh '''
                                 if [ -d "tests" ]; then
                                     python -m pytest tests/ -v
@@ -85,11 +117,10 @@ pipeline {
                         }
                     }
                 }
-                
+
                 stage('Data Ingestor Test') {
                     steps {
-                        echo "🔨 Data Ingestor 테스트 중..."
-                        dir('service-dataingestor') {
+                        dir("${APP_ROOT}/service-dataingestor") {
                             sh '''
                                 if [ -d "tests" ]; then
                                     python -m pytest tests/ -v
@@ -102,158 +133,40 @@ pipeline {
                 }
             }
         }
-        
-        stage('Docker Build & Push') {
+
+        stage('Docker Build & Push (ECR)') {
             parallel {
                 stage('Frontend Image') {
                     steps {
-                        echo "🐳 Frontend Docker 이미지 빌드 중..."
-                        dir('frontend') {
-                            script {
-                                // 네트워크 문제 해결을 위한 재시도 로직
-                                def image
-                                def retryCount = 0
-                                def maxRetries = 3
-                                
-                                while (retryCount < maxRetries) {
-                                    try {
-                                        image = docker.build("${DOCKERHUB_USERNAME}/${IMAGE_NAME}-frontend:${PROD_TAG}")
-                                        break
-                                    } catch (Exception e) {
-                                        retryCount++
-                                        if (retryCount < maxRetries) {
-                                            echo "⚠️ Docker 빌드 실패, ${retryCount}/${maxRetries} 재시도 중..."
-                                            sleep(10)
-                                        } else {
-                                            throw e
-                                        }
-                                    }
-                                }
-
-                                // Docker Hub에 푸시 (Access Token 사용)
-                                docker.withRegistry('', 'dockerhub-credentials') {
-                                    image.push()
-                                    image.push('latest')
-                                }
-
-                                // AWS ECR에 푸시 (IAM Role 사용)
-                                withAWS(region: AWS_REGION) {
-                                    sh "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}"
-                                    def ecrImage = docker.build("${ECR_REGISTRY}/${IMAGE_NAME}-frontend:${PROD_TAG}")
-                                    ecrImage.push()
-                                    ecrImage.push('latest')
-                                }
-                            }
-                        }
+                        buildAndPushEcr("${APP_ROOT}/frontend", 'service-frontend')
                     }
                 }
-                
                 stage('Currency Service Image') {
                     steps {
-                        echo "🐳 Currency Service Docker 이미지 빌드 중..."
-                        dir('service-currency') {
-                            script {
-                                def image = docker.build("${DOCKERHUB_USERNAME}/${IMAGE_NAME}-currency:${PROD_TAG}")
-
-                                // Docker Hub에 푸시 (Access Token 사용)
-                                docker.withRegistry('', 'dockerhub-credentials') {
-                                    image.push()
-                                    image.push('latest')
-                                }
-
-                                // AWS ECR에 푸시 (IAM Role 사용)
-                                withAWS(region: AWS_REGION) {
-                                    sh "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}"
-                                    def ecrImage = docker.build("${ECR_REGISTRY}/${IMAGE_NAME}-currency:${PROD_TAG}")
-                                    ecrImage.push()
-                                    ecrImage.push('latest')
-                                }
-                            }
-                        }
+                        buildAndPushEcr("${APP_ROOT}/service-currency", 'service-currency')
                     }
                 }
-                
                 stage('History Service Image') {
                     steps {
-                        echo "🐳 History Service Docker 이미지 빌드 중..."
-                        dir('service-history') {
-                            script {
-                                def image = docker.build("${DOCKERHUB_USERNAME}/${IMAGE_NAME}-history:${PROD_TAG}")
-
-                                // Docker Hub에 푸시 (Access Token 사용)
-                                docker.withRegistry('', 'dockerhub-credentials') {
-                                    image.push()
-                                    image.push('latest')
-                                }
-
-                                // AWS ECR에 푸시 (IAM Role 사용)
-                                withAWS(region: AWS_REGION) {
-                                    sh "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}"
-                                    def ecrImage = docker.build("${ECR_REGISTRY}/${IMAGE_NAME}-history:${PROD_TAG}")
-                                    ecrImage.push()
-                                    ecrImage.push('latest')
-                                }
-                            }
-                        }
+                        buildAndPushEcr("${APP_ROOT}/service-history", 'service-history')
                     }
                 }
-                
                 stage('Ranking Service Image') {
                     steps {
-                        echo "🐳 Ranking Service Docker 이미지 빌드 중..."
-                        dir('service-ranking') {
-                            script {
-                                def image = docker.build("${DOCKERHUB_USERNAME}/${IMAGE_NAME}-ranking:${PROD_TAG}")
-
-                                // Docker Hub에 푸시 (Access Token 사용)
-                                docker.withRegistry('', 'dockerhub-credentials') {
-                                    image.push()
-                                    image.push('latest')
-                                }
-
-                                // AWS ECR에 푸시 (IAM Role 사용)
-                                withAWS(region: AWS_REGION) {
-                                    sh "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}"
-                                    def ecrImage = docker.build("${ECR_REGISTRY}/${IMAGE_NAME}-ranking:${PROD_TAG}")
-                                    ecrImage.push()
-                                    ecrImage.push('latest')
-                                }
-                            }
-                        }
+                        buildAndPushEcr("${APP_ROOT}/service-ranking", 'service-ranking')
                     }
                 }
-                
                 stage('Data Ingestor Image') {
                     steps {
-                        echo "🐳 Data Ingestor Docker 이미지 빌드 중..."
-                        dir('service-dataingestor') {
-                            script {
-                                def image = docker.build("${DOCKERHUB_USERNAME}/${IMAGE_NAME}-dataingestor:${PROD_TAG}")
-
-                                // Docker Hub에 푸시 (Access Token 사용)
-                                docker.withRegistry('', 'dockerhub-credentials') {
-                                    image.push()
-                                    image.push('latest')
-                                }
-
-                                // AWS ECR에 푸시 (IAM Role 사용)
-                                withAWS(region: AWS_REGION) {
-                                    sh "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}"
-                                    def ecrImage = docker.build("${ECR_REGISTRY}/${IMAGE_NAME}-dataingestor:${PROD_TAG}")
-                                    ecrImage.push()
-                                    ecrImage.push('latest')
-                                }
-                            }
-                        }
+                        buildAndPushEcr("${APP_ROOT}/service-dataingestor", 'service-dataingestor')
                     }
                 }
             }
         }
-        
+
         stage('SBOM & Vulnerability Scan') {
             steps {
                 script {
-                    // Trivy 미설치 시 자동 설치
                     sh '''
                         if ! command -v trivy &> /dev/null; then
                             curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
@@ -262,27 +175,18 @@ pipeline {
                         trivy --version
                     '''
 
-                    def services = [
-                        'frontend',
-                        'currency',
-                        'history',
-                        'ranking',
-                        'dataingestor'
-                    ]
-
+                    def services = ['frontend', 'currency', 'history', 'ranking', 'dataingestor']
                     def scanTasks = [:]
                     services.each { svc ->
                         def serviceName = svc
                         scanTasks["SBOM: ${serviceName}"] = {
                             def image = "${ECR_REGISTRY}/service-${serviceName}:${PROD_TAG}"
                             sh """
-                                # SBOM 생성 (CycloneDX JSON)
                                 trivy image \
                                     --format cyclonedx \
                                     --output sbom-${serviceName}.json \
                                     ${image}
 
-                                # 취약점 스캔 — CRITICAL 발견 시 파이프라인 중단
                                 trivy image \
                                     --exit-code 1 \
                                     --severity CRITICAL \
@@ -300,147 +204,154 @@ pipeline {
             post {
                 always {
                     archiveArtifacts artifacts: 'sbom-*.json', allowEmptyArchive: true
-                    echo "SBOM 파일이 Jenkins 아티팩트로 저장되었습니다."
                 }
             }
         }
 
-        // GitOps 저장소 업데이트를 통한 배포
-        stage('Update GitOps Repository') {
+        stage('Update GitOps (EKS overlay)') {
             steps {
-                echo "🔄 GitOps 저장소 이미지 태그 업데이트 중..."
                 script {
-                    // GitOps 저장소 클론
-                    sh '''
-                        rm -rf gitops-repo
-                        git clone https://github.com/KORgosu/trip-currency-local-gitops.git gitops-repo
-                        cd gitops-repo
-                    '''
-
-                    // kustomization.yaml의 이미지 태그 업데이트
-                    sh """
-                        cd gitops-repo/k8s/overlays/prod
-                        sed -i 's|korgosu/service-frontend:.*|korgosu/service-frontend:${PROD_TAG}|g' kustomization.yaml
-                        sed -i 's|korgosu/service-currency:.*|korgosu/service-currency:${PROD_TAG}|g' kustomization.yaml
-                        sed -i 's|korgosu/service-history:.*|korgosu/service-history:${PROD_TAG}|g' kustomization.yaml
-                        sed -i 's|korgosu/service-ranking:.*|korgosu/service-ranking:${PROD_TAG}|g' kustomization.yaml
-                        sed -i 's|korgosu/service-dataingestor:.*|korgosu/service-dataingestor:${PROD_TAG}|g' kustomization.yaml
-                    """
-
-                    // 변경사항 커밋 및 푸시 (GitHub Token 사용)
-                    withCredentials([usernamePassword(credentialsId: 'github-token', usernameVariable: 'GIT_USERNAME', passwordVariable: 'GIT_TOKEN')]) {
-                        sh """
-                            cd gitops-repo
-                            git config user.name "Jenkins CI"
-                            git config user.email "jenkins@yourdomain.com"
-                            git remote set-url origin https://\${GIT_USERNAME}:\${GIT_TOKEN}@github.com/KORgosu/trip-currency-local-gitops.git
-                            git add .
-                            git commit -m "chore: Update image tags to ${PROD_TAG} for production deployment
-
-🚀 Automated deployment via Jenkins CI/CD
-- Frontend: korgosu/service-frontend:${PROD_TAG}
-- Currency: korgosu/service-currency:${PROD_TAG}
-- History: korgosu/service-history:${PROD_TAG}
-- Ranking: korgosu/service-ranking:${PROD_TAG}
-- DataIngestor: korgosu/service-dataingestor:${PROD_TAG}
-
-ArgoCD will automatically sync these changes to production cluster."
-                            git push origin main
-                        """
-                    }
-
-                    echo "✅ GitOps 저장소 업데이트 완료!"
-                    echo "🔄 ArgoCD가 자동으로 변경사항을 감지하여 운영 클러스터에 배포합니다."
-                    echo "📋 업데이트된 이미지 태그: ${PROD_TAG}"
+                    updateEksGitOpsImageTags()
                 }
             }
         }
-        
-        // Health Check - 주석 처리됨
-        // stage('Health Check') {
-        //     steps {
-        //         echo "🏥 헬스 체크 수행 중..."
-        //         script {
-        //             // Kubernetes 클러스터 존재 여부 확인
-        //             def k8sAvailable = false
-        //             try {
-        //                 sh '''
-        //                     // Kubernetes 클러스터 연결 확인
-        //                     kubectl cluster-info
-        //                     kubectl get nodes
-        //                 '''
-        //                 k8sAvailable = true
-        //             } catch (Exception e) {
-        //                 echo "⚠️ Kubernetes 클러스터에 연결할 수 없습니다."
-        //                 echo "📦 헬스 체크를 건너뜁니다."
-        //                 k8sAvailable = false
-        //             }
-        //
-        //             if (k8sAvailable) {
-        //                 if (env.BRANCH_NAME == 'main') {
-        //                     // 프로덕션 환경 헬스 체크
-        //                     sh '''
-        //                         // 서비스 헬스 체크
-        //                         kubectl get pods -n trip-service-prod
-        //                         kubectl get services -n trip-service-prod
-        //
-        //                         // API 엔드포인트 테스트
-        //                         kubectl run health-check --image=curlimages/curl -i --tty --rm -n trip-service-prod -- sh -c "
-        //                             curl -f http://service-currency:8000/health || exit 1
-        //                             curl -f http://service-history:8000/health || exit 1
-        //                             curl -f http://service-ranking:8000/health || exit 1
-        //                             curl -f http://service-dataingestor:8000/health || exit 1
-        //                         "
-        //                     '''
-        //                 } else {
-        //                     // 개발 환경 헬스 체크
-        //                     sh '''
-        //                         // 서비스 헬스 체크
-        //                         kubectl get pods -n trip-service-dev
-        //                         kubectl get services -n trip-service-dev
-        //
-        //                         // API 엔드포인트 테스트
-        //                         kubectl run health-check --image=curlimages/curl -i --tty --rm -n trip-service-dev -- sh -c "
-        //                             curl -f http://service-currency:8000/health || exit 1
-        //                             curl -f http://service-history:8000/health || exit 1
-        //                             curl -f http://service-ranking:8000/health || exit 1
-        //                             curl -f http://service-dataingestor:8000/health || exit 1
-        //                         "
-        //                     '''
-        //                 }
-        //             } else {
-        //                 echo "📦 Kubernetes 클러스터가 존재하지 않습니다."
-        //                 echo "✅ 헬스 체크를 건너뛰고 파이프라인을 완료합니다."
-        //             }
-        //         }
-        //     }
-        // }
     }
-    
+
     post {
         always {
-            echo "🧹 정리 작업 수행 중..."
+            echo '🧹 정리 작업 수행 중...'
             cleanWs()
         }
-        
         success {
-            echo "✅ 파이프라인 성공! Docker Hub와 ECR 이미지 푸시 및 GitOps 저장소 업데이트 완료"
-            // Slack 알림은 Jenkins에서 별도 설정 필요
-            // slackSend(
-            //     channel: '#production',
-            //     color: 'good',
-            //     message: "✅ ${env.JOB_NAME} - ${env.BUILD_NUMBER} 빌드 및 이미지 푸시 성공!\n이미지 태그: ${PROD_TAG}"
-            // )
+            echo "✅ EKS GitOps CI 완료 — ECR 태그: ${PROD_TAG}, overlay: ${GITOPS_OVERLAY}"
         }
-        
         failure {
-            echo "❌ 파이프라인 실패! 빌드 로그를 확인하세요."
-            // Slack 알림은 Jenkins에서 별도 설정 필요
-            // slackSend(
-            //     channel: '#production',
-            //     color: 'danger',
-            //     message: "❌ ${env.JOB_NAME} - ${env.BUILD_NUMBER} 빌드 또는 이미지 푸시 실패!\n로그 확인: ${env.BUILD_URL}"
-            // )
+            echo '❌ 파이프라인 실패! 빌드 로그를 확인하세요.'
         }
+    }
+}
+
+/** ECR에 이미지 1회 빌드·푸시 (불변 태그 prod-BUILD_NUMBER) */
+def buildAndPushEcr(String contextDir, String ecrRepository) {
+    dir(contextDir) {
+        script {
+            def retryCount = 0
+            def maxRetries = 3
+            def image
+
+            while (retryCount < maxRetries) {
+                try {
+                    image = docker.build("${ECR_REGISTRY}/${ecrRepository}:${PROD_TAG}")
+                    break
+                } catch (Exception e) {
+                    retryCount++
+                    if (retryCount < maxRetries) {
+                        echo "⚠️ Docker 빌드 실패, ${retryCount}/${maxRetries} 재시도 중..."
+                        sleep(10)
+                    } else {
+                        throw e
+                    }
+                }
+            }
+
+            image.push()
+            echo "✅ Pushed ${ECR_REGISTRY}/${ecrRepository}:${PROD_TAG}"
+        }
+    }
+}
+
+/** trip-currency-local-gitops/k8s/overlays/eks 이미지 태그 갱신 */
+def updateEksGitOpsImageTags() {
+    def ecrServices = [
+        'service-frontend',
+        'service-currency',
+        'service-history',
+        'service-ranking',
+        'service-dataingestor'
+    ]
+
+    def applySed = { String kustomizeFile ->
+        ecrServices.each { repo ->
+            def fullImage = "${ECR_REGISTRY}/${repo}:${PROD_TAG}"
+            sh """
+                sed -i 's|value: .*\\.amazonaws\\.com/${repo}:.*|value: ${fullImage}|g' '${kustomizeFile}'
+            """
+        }
+        sh "grep -E 'service-(frontend|currency|history|ranking|dataingestor):' '${kustomizeFile}' || true"
+    }
+
+    def commitSubject = "chore(eks): bump ECR image tags to ${PROD_TAG}"
+    def commitBody = "Jenkins EKS pipeline. Registry: ${ECR_REGISTRY}. Argo CD sync → trip-service-prod."
+
+    if (env.GITOPS_IN_MONOREPO == 'true') {
+        def kustomizeFile = "${env.GITOPS_ROOT}/${env.GITOPS_OVERLAY}/kustomization.yaml"
+        if (!fileExists(kustomizeFile)) {
+            error("GitOps kustomization not found: ${kustomizeFile}")
+        }
+
+        applySed(kustomizeFile)
+
+        withCredentials([usernamePassword(
+            credentialsId: 'github-token',
+            usernameVariable: 'GIT_USERNAME',
+            passwordVariable: 'GIT_TOKEN'
+        )]) {
+            sh '''
+                git config user.name "Jenkins CI"
+                git config user.email "jenkins@trip-currency.local"
+                ORIGIN=$(git remote get-url origin)
+                case "$ORIGIN" in
+                    git@github.com:*)
+                        REPO_PATH=$(echo "$ORIGIN" | sed 's#git@github.com:##; s#\\.git$##')
+                        git remote set-url origin "https://${GIT_USERNAME}:${GIT_TOKEN}@github.com/${REPO_PATH}.git"
+                        ;;
+                    https://*)
+                        git remote set-url origin "$(echo "$ORIGIN" | sed -E "s#https://([^@]+@)?#https://${GIT_USERNAME}:${GIT_TOKEN}@#")"
+                        ;;
+                esac
+            '''
+            sh """
+                git add '${kustomizeFile}'
+                if git diff --staged --quiet; then
+                    echo 'ℹ️ GitOps 이미지 태그 변경 없음 — 커밋 생략'
+                    exit 0
+                fi
+                git commit -m "${commitSubject}" -m "${commitBody}"
+                git push origin HEAD:${GITOPS_BRANCH}
+            """
+        }
+    } else {
+        sh """
+            rm -rf gitops-repo
+            git clone --branch ${GITOPS_BRANCH} --depth 1 ${GITOPS_REPO_URL} gitops-repo
+        """
+
+        def kustomizeFile = "gitops-repo/${env.GITOPS_OVERLAY}/kustomization.yaml"
+        applySed(kustomizeFile)
+
+        withCredentials([usernamePassword(
+            credentialsId: 'github-token',
+            usernameVariable: 'GIT_USERNAME',
+            passwordVariable: 'GIT_TOKEN'
+        )]) {
+            sh """
+                cd gitops-repo
+                git config user.name "Jenkins CI"
+                git config user.email "jenkins@trip-currency.local"
+                git remote set-url origin https://\${GIT_USERNAME}:\${GIT_TOKEN}@github.com/KORgosu/trip-currency-local-gitops.git
+                git add '${env.GITOPS_OVERLAY}/kustomization.yaml'
+                if git diff --staged --quiet; then
+                    echo "ℹ️ GitOps 이미지 태그 변경 없음 — 커밋 생략"
+                    exit 0
+                fi
+                git commit -m "${commitSubject}" -m "${commitBody}"
+                git push origin ${GITOPS_BRANCH}
+            """
+        }
+    }
+
+    echo "✅ GitOps EKS overlay 업데이트 완료 — 태그: ${PROD_TAG}"
+    ecrServices.each { repo ->
+        echo "   ${ECR_REGISTRY}/${repo}:${PROD_TAG}"
     }
 }

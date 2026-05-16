@@ -17,7 +17,7 @@ patches:
   patch: |-
     - op: replace
       path: /spec/template/spec/containers/0/image
-      value: ${AWS_ACCOUNT_ID}.dkr.ecr.ap-northeast-2.amazonaws.com/service-frontend:latest
+      value: ${AWS_ACCOUNT_ID}.dkr.ecr.ap-northeast-2.amazonaws.com/service-frontend:prod-initial
     - op: replace
       path: /spec/template/spec/containers/0/imagePullPolicy
       value: Always
@@ -28,7 +28,7 @@ patches:
   patch: |-
     - op: replace
       path: /spec/template/spec/containers/0/image
-      value: ${AWS_ACCOUNT_ID}.dkr.ecr.ap-northeast-2.amazonaws.com/service-currency:latest
+      value: ${AWS_ACCOUNT_ID}.dkr.ecr.ap-northeast-2.amazonaws.com/service-currency:prod-initial
     - op: replace
       path: /spec/template/spec/containers/0/imagePullPolicy
       value: Always
@@ -39,7 +39,7 @@ patches:
   patch: |-
     - op: replace
       path: /spec/template/spec/containers/0/image
-      value: ${AWS_ACCOUNT_ID}.dkr.ecr.ap-northeast-2.amazonaws.com/service-history:latest
+      value: ${AWS_ACCOUNT_ID}.dkr.ecr.ap-northeast-2.amazonaws.com/service-history:prod-initial
     - op: replace
       path: /spec/template/spec/containers/0/imagePullPolicy
       value: Always
@@ -50,7 +50,7 @@ patches:
   patch: |-
     - op: replace
       path: /spec/template/spec/containers/0/image
-      value: ${AWS_ACCOUNT_ID}.dkr.ecr.ap-northeast-2.amazonaws.com/service-ranking:latest
+      value: ${AWS_ACCOUNT_ID}.dkr.ecr.ap-northeast-2.amazonaws.com/service-ranking:prod-initial
     - op: replace
       path: /spec/template/spec/containers/0/imagePullPolicy
       value: Always
@@ -61,7 +61,7 @@ patches:
   patch: |-
     - op: replace
       path: /spec/jobTemplate/spec/template/spec/containers/0/image
-      value: ${AWS_ACCOUNT_ID}.dkr.ecr.ap-northeast-2.amazonaws.com/service-dataingestor:latest
+      value: ${AWS_ACCOUNT_ID}.dkr.ecr.ap-northeast-2.amazonaws.com/service-dataingestor:prod-initial
     - op: replace
       path: /spec/jobTemplate/spec/template/spec/containers/0/imagePullPolicy
       value: Always
