@@ -94,6 +94,7 @@ async def initialize_services():
 
 async def cleanup_services():
     """서비스 정리"""
+    import gc
     global scheduler, data_collector, data_processor
 
     try:
@@ -107,7 +108,12 @@ async def cleanup_services():
         db_manager = get_db_manager()
         if db_manager:
             await db_manager.close()
-        
+
+        # GC를 먼저 실행해 DB 커넥션 __del__이 루프 종료 전에 호출되도록 함
+        # (asyncio.run() 이후 GC 실행 시 'Event loop is closed' 방지)
+        gc.collect()
+        await asyncio.sleep(0)
+
         logger.info("Data Ingestor Service stopped")
     except Exception as e:
         logger.error("Error during cleanup", error=e)

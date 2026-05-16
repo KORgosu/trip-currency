@@ -4,7 +4,7 @@ Data Processor - 수집된 데이터 처리 및 저장
 """
 import asyncio
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Dict, List, Any, Optional
 
@@ -230,6 +230,8 @@ class DataProcessor:
                 else:
                     # 중복 데이터이지만 타임스탬프가 더 최신인 경우 업데이트
                     latest_timestamp = result[0]['latest_timestamp'] if result else None
+                    if latest_timestamp and latest_timestamp.tzinfo is None:
+                        latest_timestamp = latest_timestamp.replace(tzinfo=timezone.utc)
                     if latest_timestamp and item.recorded_at > latest_timestamp:
                         filtered_data.append(item)
                         logger.debug(
