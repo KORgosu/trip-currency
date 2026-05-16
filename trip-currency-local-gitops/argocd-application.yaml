@@ -35,3 +35,8 @@ spec:
         - /spec/dataFrom
         - /spec/data
         - /metadata/annotations
+    - group: apps
+      kind: Deployment
+      namespace: trip-service-prod
+      jsonPointers:
+        - /spec/template/metadata/annotations/kubectl.kubernetes.io~1restartedAt
