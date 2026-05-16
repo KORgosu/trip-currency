@@ -734,7 +734,16 @@ External Secrets Operator를 통해 AWS Secrets Manager에서 자동 동기화 (
 | DB 초기화 Job 추가 | db-init-job.yaml — Aurora MySQL 스키마·통화 마스터(70개) 초기화 |
 | Kafka 토픽 초기화 Job 추가 | kafka-init-job.yaml — 7개 토픽 생성 매니페스트 |
 | init-db.sql PLN 추가 | currencies 마스터에 폴란드 즐로티 추가 |
-| frontend 포트 수정 (8080→80) | nginx-unprivileged 이미지가 :80을 사용함에도 Deployment·Service·NetworkPolicy가 :8080으로 잘못 설정되어 504 Gateway Timeout 발생 → 모두 :80으로 정정 |
+| frontend 포트 수정 (80→8080) | nginx-unprivileged(uid 101)는 비특권 사용자라 :80 바인딩 불가(NET_BIND_SERVICE 없음). Deployment·Service·NetworkPolicy가 :80으로 설정되어 ALB→Pod 트래픽 차단(504). containerPort·targetPort·NetworkPolicy·probe 포트 모두 :8080으로 정정 |
+| EKS 노드 SG 8080 inbound 추가 | ALB SG(sg-0bf0f0afb27f49980) → EKS 노드 SG(sg-058812b4fd626a469) TCP 8080 inbound 규칙 추가 — frontend 포트 8080 변경 후 ALB Target health 정상화 |
+| NetworkPolicy ArgoCD 통합 (12개) | `k8s/overlays/eks/network-policies/kustomization.yaml` 생성, EKS overlay kustomization에 `- network-policies/` 추가 → 12개 NetworkPolicy 전체 ArgoCD 자동 관리 (기존 수동 kubectl apply 방식 대체) |
+| ArgoCD ignoreDifferences 확장 | ConfigMap(MYSQL_HOST·MONGODB_HOST·REDIS_HOST), ExternalSecret(spec.dataFrom·spec.data·metadata.annotations), Deployment(kubectl.kubernetes.io/restartedAt) 3개 항목 추가 — phantom OutOfSync 및 rollout restart 무한 루프 해결 |
+| ConfigMap base HOST 키 제거 | base/configmap.yaml에서 MYSQL_HOST·MONGODB_HOST·REDIS_HOST 삭제 → ArgoCD가 해당 필드를 소유하지 않아 sync 후에도 kubectl patch 값이 보존됨 (ServerSideApply 소유권 원리 적용) |
+| metrics-server 설치 | 공식 컴포넌트 kubectl apply — HPA CPU/memory 메트릭 `<unknown>` 해결, ArgoCD HPA Degraded 상태 정상화 |
+| sa-currency kustomization 수정 | `serviceaccount.yaml`이 currency-service kustomization.yaml resources 목록에서 누락 → sa-currency 미생성으로 service-currency Pod FailedCreate 발생 → 목록에 추가하여 해결 |
+| EKS false positive 알림 제거 | kube-prometheus-stack values에 kubeControllerManager·kubeScheduler·kubeEtcd·kubeProxy `enabled: false` 추가 → EKS 관리형 컨트롤 플레인은 VPC에 미노출되므로 Prometheus 수집 불가 → KubeControllerManagerDown CRITICAL false positive 알림 제거 |
 | service-ranking DocumentDB 전환 | DynamoDB Mock 제거, DocumentDB(motor) 직접 연결로 전환. country_clicks·click_history·ranking_results 컬렉션 사용 |
 | ranking 스케줄러 버그 수정 | 자정 KST daily reset 시 Python logger.info() keyword argument 오류로 크래시 → f-string 임베드 방식으로 변경 |
 | DynamoDBHelper 초기화 버그 수정 | `__init__`이 positional arg를 받지 않아 `DynamoDBHelper(table_name)` 호출 시 TypeError 발생 → `table_name: str = None` 파라미터 추가 |
+| service-currency structlog 전환 | `logging.getLogger()` → `shared.logging.get_logger()` 교체 — Kafka 메시지 핸들러에서 structlog kwargs 사용 시 `Logger._log() got an unexpected keyword argument 'currency'` 오류 해결 |
+| DocumentDB retryWrites=false | 전 서비스 MongoDB 연결 문자열에 `&retryWrites=false` 추가 (package-shared 5개 + mongodb_service.py 1개) — DocumentDB가 retryWrites 미지원(code 301)으로 ranking 클릭 시 500 오류 발생 해결 |
