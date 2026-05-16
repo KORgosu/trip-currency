@@ -104,7 +104,7 @@ data:
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
-              "expr": "count(kube_pod_status_phase{namespace=\"trip-service-prod\", phase=\"Running\"})",
+              "expr": "count(kube_pod_status_phase{namespace=\"trip-service-prod\", phase=\"Running\"} == 1)",
               "legendFormat": "Running Pods"
             }
           ],
@@ -118,7 +118,7 @@ data:
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
-              "expr": "count(kube_pod_status_phase{namespace=\"trip-service-prod\", phase=~\"Pending|Failed\"})",
+              "expr": "count(kube_pod_status_phase{namespace=\"trip-service-prod\", phase=~\"Pending|Failed\"} == 1) or vector(0)",
               "legendFormat": "Pending/Failed"
             }
           ],
