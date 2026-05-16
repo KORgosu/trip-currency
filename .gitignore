@@ -48,3 +48,5 @@ venv/
 env/
 *.egg-info/
 .claude/
+\#*.txt
+jenkins-setup/keys/
