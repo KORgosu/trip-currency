@@ -28,3 +28,10 @@ spec:
         - /data/MYSQL_HOST
         - /data/MONGODB_HOST
         - /data/REDIS_HOST
+    - group: external-secrets.io
+      kind: ExternalSecret
+      namespace: trip-service-prod
+      jsonPointers:
+        - /spec/dataFrom
+        - /spec/data
+        - /metadata/annotations

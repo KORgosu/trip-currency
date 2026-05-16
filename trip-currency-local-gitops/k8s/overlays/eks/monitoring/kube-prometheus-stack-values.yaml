@@ -155,3 +155,18 @@ nodeExporter:
 # kube-state-metrics (Deployment/Pod 상태 메트릭)
 kubeStateMetrics:
   enabled: true
+
+# EKS 컨트롤 플레인 컴포넌트 비활성화
+# AWS 관리형 마스터 노드에서 실행 — 사용자 VPC에 노출되지 않아 스크래핑 불가
+# 활성화 시 KubeControllerManagerDown / KubeSchedulerDown / KubeEtcdDown false positive 발생
+kubeControllerManager:
+  enabled: false
+
+kubeScheduler:
+  enabled: false
+
+kubeEtcd:
+  enabled: false
+
+kubeProxy:
+  enabled: false
