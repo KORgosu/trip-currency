@@ -1,0 +1,30 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: trip-currency
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/KORgosu/trip-currency.git
+    targetRevision: main
+    path: trip-currency-local-gitops/k8s/overlays/eks
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: trip-service-prod
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+  ignoreDifferences:
+    - group: ""
+      kind: ConfigMap
+      name: trip-service-config
+      namespace: trip-service-prod
+      jsonPointers:
+        - /data/MYSQL_HOST
+        - /data/MONGODB_HOST
+        - /data/REDIS_HOST

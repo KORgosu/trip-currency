@@ -71,20 +71,11 @@ patches:
     name: trip-service-config
   patch: |-
     - op: replace
-      path: /data/MYSQL_HOST
-      value: "${AURORA_ENDPOINT}"
-    - op: replace
       path: /data/MYSQL_USER
       value: "trip_admin"
     - op: replace
-      path: /data/MONGODB_HOST
-      value: "${DOCDB_ENDPOINT}"
-    - op: replace
       path: /data/MONGODB_USER
       value: "trip_admin"
-    - op: replace
-      path: /data/REDIS_HOST
-      value: "${REDIS_ENDPOINT}"
     - op: add
       path: /data/ENVIRONMENT
       value: "prod"
