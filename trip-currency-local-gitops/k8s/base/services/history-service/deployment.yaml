@@ -39,14 +39,6 @@ spec:
         env:
         - name: PORT
           value: "8000"
-        - name: MYSQL_HOST
-          value: "service-mysql"
-        - name: MYSQL_PORT
-          value: "3306"
-        - name: MYSQL_DATABASE
-          value: "currency_db"
-        - name: MYSQL_USER
-          value: "trip_user"
         - name: MYSQL_PASSWORD
           valueFrom:
             secretKeyRef:
