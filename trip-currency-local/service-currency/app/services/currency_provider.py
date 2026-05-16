@@ -9,14 +9,14 @@ from typing import Dict, List, Optional, Any
 import json
 
 from shared.database import RedisHelper, MySQLHelper
-import logging
+from shared.logging import get_logger
 from shared.models import ExchangeRate, CurrencyInfo
 from shared.exceptions import (
     DatabaseError, CacheError, NotFoundError, 
     handle_database_exception, handle_cache_exception
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class CurrencyProvider:
@@ -185,7 +185,7 @@ class CurrencyProvider:
             return None
             
         except Exception as e:
-            logger.warning(f"Cache lookup failed for {currency_code}", error=e)
+            logger.warning(f"Cache lookup failed for {currency_code}: {e}")
             return None
     
     async def _get_rate_from_db(self, currency_code: str) -> Optional[Dict[str, Any]]:

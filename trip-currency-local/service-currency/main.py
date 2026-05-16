@@ -35,8 +35,7 @@ import time
 
 from shared.config import init_config, get_config
 from shared.database import init_database, get_db_manager
-import logging
-from shared.logging import set_correlation_id, set_request_id
+from shared.logging import get_logger, set_correlation_id, set_request_id
 from shared.models import (
     LatestRatesResponse, CurrencyInfo, 
     CurrencyCode, CountryCode, SuccessResponse, ErrorResponse
@@ -51,7 +50,7 @@ from app.services.currency_provider import CurrencyProvider
 from shared.messaging import MessageConsumer
 
 # 로거 초기화
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # 전역 변수
 currency_provider: Optional[CurrencyProvider] = None
@@ -581,9 +580,7 @@ async def handle_new_data_received(message: dict):
     """새로운 데이터 수신 이벤트 처리"""
     source = message.get("source")
     data_count = message.get("data_count")
-    logger.info("New data received event processed", 
-                source=source,
-                data_count=data_count)
+    logger.info(f"New data received event processed: source={source}, data_count={data_count}")
     
     # 새로운 환율 데이터가 수신되었을 때 Currency Service 준비
     try:
@@ -598,9 +595,7 @@ async def handle_exchange_rate_updated(message: dict):
     """환율 업데이트 이벤트 처리"""
     currency_code = message.get("currency_code")
     rate = message.get("deal_base_rate")
-    logger.info("Exchange rate updated event processed", 
-                currency=currency_code,
-                rate=rate)
+    logger.info(f"Exchange rate updated event processed: currency={currency_code}, rate={rate}")
     
     # 특정 통화의 환율이 업데이트되었을 때 해당 통화의 캐시 무효화
     try:
@@ -620,9 +615,7 @@ async def handle_data_processing_completed(message: dict):
     """데이터 처리 완료 이벤트 처리"""
     source = message.get("source")
     total_processed = message.get("total_processed")
-    logger.info("Data processing completed event processed",
-                source=source,
-                total_processed=total_processed)
+    logger.info(f"Data processing completed event processed: source={source}, total_processed={total_processed}")
     
     # 데이터 처리 완료 후 전체 환율 캐시 갱신
     try:
@@ -638,9 +631,7 @@ async def handle_cache_invalidation(message: dict):
     """캐시 무효화 이벤트 처리"""
     cache_keys = message.get("cache_keys", [])
     invalidation_type = message.get("invalidation_type")
-    logger.info("Cache invalidation event processed",
-                keys=cache_keys,
-                type=invalidation_type)
+    logger.info(f"Cache invalidation event processed: keys={cache_keys}, type={invalidation_type}")
     
     # Currency Service의 캐시 무효화 처리
     if currency_provider and cache_keys:
