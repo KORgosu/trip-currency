@@ -228,7 +228,7 @@ Docker Build & Push (ECR)
 | dataingestor | ✅ (uid 1000) | ✅ | false | ALL drop | RuntimeDefault |
 
 `readOnlyRootFilesystem` 적용 서비스는 emptyDir 볼륨으로 쓰기 경로 확보 (`/tmp`, `/app/logs`, nginx 임시 경로).
-frontend는 `nginx:alpine`(root 필수) 대신 `nginxinc/nginx-unprivileged:alpine`(uid 101, :80)으로 전환하여 `runAsNonRoot` 및 `NET_BIND_SERVICE` 예외 없이 PSA restricted 완전 준수.
+frontend는 `nginx:alpine`(root 필수) 대신 `nginxinc/nginx-unprivileged:alpine`(uid 101, :8080)으로 전환하여 `runAsNonRoot` 및 `NET_BIND_SERVICE` 예외 없이 PSA restricted 완전 준수.
 
 **PSA 네임스페이스 레이블 (`k8s/overlays/eks/namespace.yaml`)**
 ```yaml
@@ -330,7 +330,7 @@ pod-security.kubernetes.io/warn: restricted
 | HIGH | GuardDuty 미활성화 | ✅ 조치완료 |
 | MEDIUM | securityContext 미설정 | ✅ 조치완료 (runAsNonRoot·readOnlyRootFilesystem·capabilities.drop) |
 | MEDIUM | seccompProfile 미설정 | ✅ 조치완료 (전 워크로드 RuntimeDefault) |
-| MEDIUM | frontend root 실행 | ✅ 조치완료 (nginx-unprivileged:alpine, uid 101, :80) |
+| MEDIUM | frontend root 실행 | ✅ 조치완료 (nginx-unprivileged:alpine, uid 101, :8080) |
 | MEDIUM | Pod Security Admission 미적용 | ✅ 조치완료 (enforce=restricted, trip-service-prod) |
 | MEDIUM | Kubernetes RBAC 미구성 | ✅ 조치완료 (전용 SA + automountServiceAccountToken: false) |
 | MEDIUM | kafka-ui 무인증 접근 | ⚠️ 부분조치 (NP 차단, Auth 미설정) |
@@ -372,7 +372,7 @@ pod-security.kubernetes.io/warn: restricted
 
 | 서비스 | 이미지 | 레플리카 | 타입 | 포트 | HPA |
 |--------|--------|----------|------|------|-----|
-| service-frontend | ECR:latest | 3 | ClusterIP + Ingress | 80 | min:1 / max:12 |
+| service-frontend | ECR:latest | 3 | ClusterIP + Ingress | 8080 | min:1 / max:12 |
 | service-currency | ECR:latest | 2 | ClusterIP | 8000 | min:1 / max:10 |
 | service-history | ECR:latest | 2 | ClusterIP | 8000 | min:1 / max:8 |
 | service-ranking | ECR:latest | 2 | ClusterIP | 8000 | min:1 / max:8 |
@@ -575,10 +575,10 @@ External Secrets Operator를 통해 AWS Secrets Manager에서 자동 동기화 (
   - 컨테이너 수준: `allowPrivilegeEscalation: false`, `readOnlyRootFilesystem: true`, `capabilities.drop: ALL`
 - **조치 내용 (2차, 2026-05-15)**: PSA `restricted` 완전 준수를 위한 추가 조치
   - **전 워크로드**: Pod 수준 `seccompProfile: {type: RuntimeDefault}` 추가 (PSA restricted 필수 요건)
-  - **frontend**: `nginx:alpine`(root 필수, :80) → `nginxinc/nginx-unprivileged:alpine`(uid 101, :80)으로 이미지 전환
+  - **frontend**: `nginx:alpine`(root 필수, :80) → `nginxinc/nginx-unprivileged:alpine`(uid 101, :8080)으로 이미지 전환
     - `runAsNonRoot: true`, `runAsUser: 101` 적용 가능
-    - `NET_BIND_SERVICE` capability 제거 (포트 80은 비특권 포트)
-    - Service `targetPort: 80`, NetworkPolicy `port: 80`으로 연동 수정
+    - `NET_BIND_SERVICE` capability 제거 (포트 8080은 비특권 포트 — nginx-unprivileged 기본 포트)
+    - Service `targetPort: 8080`, NetworkPolicy `port: 8080`으로 연동 수정
   - **kafka/zookeeper/kafka-ui**: 데이터 기록 필요로 `readOnlyRootFilesystem` 미적용 (PSA restricted 비필수 항목)
   - **Namespace**: `pod-security.kubernetes.io/enforce: restricted` 레이블 적용 → 기준 미달 Pod 배포 차단
 - **결과**: 전 서비스 PSA restricted 완전 준수. API 서버 수준에서 비준수 Pod 배포 자체를 차단
