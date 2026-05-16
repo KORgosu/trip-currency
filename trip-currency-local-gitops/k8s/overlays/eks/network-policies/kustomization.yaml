@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- 00-default-deny.yaml
+- 01-allow-dns.yaml
+- 02-frontend.yaml
+- 03-currency.yaml
+- 04-history.yaml
+- 05-ranking.yaml
+- 06-dataingestor.yaml
+- 07-kafka.yaml
+- 08-kafka-ui.yaml
+- 09-zookeeper.yaml
+- 10-allow-prometheus-scrape.yaml
+- 11-kafka-exporter.yaml

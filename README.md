@@ -20,7 +20,7 @@
 |------|------|----------|
 | 00-default-deny | Ingress+Egress | 전체 차단 (기본값) |
 | 01-allow-dns | Egress | 전 Pod → CoreDNS :53 |
-| 02-frontend | Ingress | VPC CIDR → :80 |
+| 02-frontend | Ingress | VPC CIDR → :8080 (nginx-unprivileged, non-root) |
 | 03-currency | Ingress/Egress | ALB → :8000 / Aurora·Redis·Kafka·HTTPS |
 | 04-history | Ingress/Egress | ALB → :8000 / Aurora·DocDB·Redis·Kafka |
 | 05-ranking | Ingress/Egress | ALB → :8000 / DocDB·Redis·Kafka |

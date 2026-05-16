@@ -71,7 +71,7 @@
               │  │                                                      │
               │  │  [trip-service-prod]        NetworkPolicy: 적용됨    │
               │  │                             PSA: enforce=restricted  │
-              │  │  service-frontend  (ClusterIP :80)                 │
+              │  │  service-frontend  (ClusterIP :80 → Pod :8080)     │
               │  │  service-currency  (ClusterIP :8000)                │
               │  │  service-history   (ClusterIP :8000)                │
               │  │  service-ranking   (ClusterIP :8000)                │
@@ -156,8 +156,8 @@ trip-currency-local-gitops/
 │   │       │   └── kustomization.yaml
 │   │       └── frontend/
 │   │           ├── serviceaccount.yaml    # sa-frontend (automountToken: false)
-│   │           ├── deployment.yaml        # nginx:custom, uid 101, :80             
-│   │           ├── service.yaml           # port 80 → targetPort 80  
+│   │           ├── deployment.yaml        # nginx-unprivileged, uid 101, pod :8080
+│   │           ├── service.yaml           # port 80 → targetPort 8080
 │   │           ├── hpa.yaml
 │   │           ├── configmap.yaml         # api-base-url: https://2025teamproject.store
 │   │           ├── ingress.yaml           # NGINX Ingress (로컬 K8s용)
@@ -272,6 +272,54 @@ kubectl apply -f k8s/overlays/eks/monitoring/grafana-admin-secret.yaml -n monito
 
 ---
 
+## CI/CD 파이프라인 (Jenkins → ArgoCD)
+
+### 전체 흐름
+
+```
+GitHub Push (trip-currency-local/)
+  └─ Jenkins (ec2-worker-ubuntu)
+       ├─ Build & Test          — 서비스별 단위 테스트 (병렬)
+       ├─ ECR Login             — withAWS() + aws ecr get-login-password
+       ├─ Docker Build & Push   — ECR, 이미지 태그: EKS-{BUILD_NUMBER} (병렬)
+       ├─ SBOM & Scan           — Trivy CycloneDX + CRITICAL 취약점 차단 (병렬)
+       └─ Update GitOps         — kustomization.yaml 이미지 태그 sed 업데이트 → git push
+
+GitHub (trip-currency-local-gitops main 브랜치 업데이트)
+  └─ ArgoCD (automated sync, prune, selfHeal)
+       └─ kubectl apply -k k8s/overlays/eks → EKS trip-service-prod 반영
+```
+
+### 이미지 태그 규칙
+
+| 환경 | 태그 형식 | 레지스트리 |
+|------|---------|----------|
+| EKS 프로덕션 | `EKS-{BUILD_NUMBER}` | AWS ECR (716773066105.dkr.ecr.ap-northeast-2.amazonaws.com) |
+
+### ArgoCD Application
+
+```yaml
+# argocd-application.yaml
+repoURL: https://github.com/KORgosu/trip-currency.git
+path: trip-currency-local-gitops/k8s/overlays/eks
+syncPolicy: automated (prune: true, selfHeal: true)
+ignoreDifferences:
+  - ConfigMap/trip-service-config: MYSQL_HOST, MONGODB_HOST, REDIS_HOST
+    # 이유: 엔드포인트는 보안상 git에 저장 불가 → kubectl patch로 별도 주입
+```
+
+### 엔드포인트 주입 (배포 후 최초 1회)
+
+DB 엔드포인트는 `.env.aws`에서 직접 읽어 kubectl patch로 주입합니다 (git에 저장하지 않음):
+
+```bash
+source .env.aws
+kubectl patch configmap trip-service-config -n trip-service-prod --type merge \
+  -p "{\"data\":{\"MYSQL_HOST\":\"${AURORA_ENDPOINT}\",\"MONGODB_HOST\":\"${DOCDB_ENDPOINT}\",\"REDIS_HOST\":\"${REDIS_ENDPOINT}\"}}"
+```
+
+---
+
 ## EKS 인프라 구성
 
 ### ALB IngressGroup
@@ -280,7 +328,7 @@ kubectl apply -f k8s/overlays/eks/monitoring/grafana-admin-secret.yaml -n monito
 
 | Ingress | 네임스페이스 | 호스트 | 백엔드 |
 |---------|------------|--------|--------|
-| trip-service-ingress | trip-service-prod | 2025teamproject.store | frontend(:80), currency, history, ranking |
+| trip-service-ingress | trip-service-prod | 2025teamproject.store | frontend(svc:80→pod:8080), currency, history, ranking |
 | grafana-ingress | monitoring | grafana.2025teamproject.store | kube-prometheus-stack-grafana:80 |
 
 - ACM 인증서: `*.2025teamproject.store` (SAN 포함)
@@ -352,7 +400,7 @@ pod-security.kubernetes.io/warn: restricted
 | zookeeper | cp-zookeeper:7.4.0 | ✅ uid 1000 | - | RuntimeDefault |
 | kafka-ui | kafka-ui:latest | ✅ uid 1000 | - | RuntimeDefault |
 
-> frontend는 `nginx:alpine`(root 필수) 대신 `nginxinc/nginx-unprivileged:alpine`(uid 101, :80)을 사용합니다.
+> frontend는 `nginx:alpine`(root 필수) 대신 `nginxinc/nginx-unprivileged:alpine`(uid 101, pod :8080)을 사용합니다. Service port 80은 유지하고 targetPort만 8080으로 설정합니다.
 
 ### Kubernetes RBAC (인-클러스터)
 
@@ -483,7 +531,7 @@ kubectl apply -f k8s/overlays/eks/network-policies/
 |------|------|
 | 00-default-deny.yaml | 기본 Ingress/Egress 전체 차단 |
 | 01-allow-dns.yaml | 모든 Pod → CoreDNS :53 허용 |
-| 02-frontend.yaml | VPC CIDR → frontend :80 |
+| 02-frontend.yaml | VPC CIDR → frontend :8080 |
 | 03-currency.yaml | ALB → :8000; egress: Aurora/DocDB/Redis/Kafka/외부 HTTPS |
 | 04-history.yaml | ALB → :8000; egress: Aurora/DocDB/Redis/Kafka |
 | 05-ranking.yaml | ALB → :8000; egress: DocDB:27017/Redis/Kafka |
@@ -555,11 +603,13 @@ envsubst < aws/iam/ebs-csi-trust.json.template > aws/iam/ebs-csi-trust.json
 envsubst < aws/eks/cluster-config.yaml.template > aws/eks/cluster-config.yaml
 
 # 2. Namespace 및 기본 리소스 (PSA 레이블 포함)
+# ArgoCD가 자동 sync — 수동 apply 불필요 (GitOps 운영 시)
+# 수동 적용이 필요한 경우:
 kubectl apply -k k8s/overlays/eks
 
-# 3. Calico 설치 및 NetworkPolicy 적용
+# 3. Calico 설치 (최초 1회, ArgoCD가 관리하지 않음)
 kubectl apply -f k8s/overlays/eks/calico/installation.yaml
-kubectl apply -f k8s/overlays/eks/network-policies/
+# NetworkPolicy는 kustomization에 포함되어 ArgoCD가 자동 관리
 
 # 4. Grafana admin Secret 생성
 cp k8s/overlays/eks/monitoring/grafana-admin-secret.yaml.example \

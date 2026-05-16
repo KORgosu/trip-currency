@@ -350,12 +350,24 @@ kubectl exec -it $(kubectl get pod -l app=redis -n trip-service-dev -o jsonpath=
 ```
 Git Push → Jenkins 웹훅 트리거
   → Build & Test (서비스별 단위 테스트, 병렬)
-  → Docker Build & Push (ECR + Docker Hub, 병렬)
-  → SBOM & Vulnerability Scan (Trivy, 병렬)
+  → ECR Login (withAWS + aws ecr get-login-password)
+  → Docker Build & Push (ECR, 태그: EKS-{BUILD_NUMBER}, 병렬)
+  → SBOM & Vulnerability Scan (Trivy, 서비스별 캐시 분리, 병렬)
        ├─ CycloneDX SBOM 생성 → Jenkins 아티팩트 보관
        └─ CRITICAL 취약점 발견 시 파이프라인 중단
-  → Update GitOps Repository (이미지 태그 업데이트 → ArgoCD 자동 배포)
+  → Update GitOps (kustomization.yaml 이미지 태그 sed 업데이트 → git push)
+       └─ ArgoCD automated sync → EKS trip-service-prod 자동 반영
 ```
+
+### ArgoCD GitOps
+
+EKS 배포는 ArgoCD가 `trip-currency-local-gitops/k8s/overlays/eks`를 감시하여 자동 배포합니다.
+
+| 항목 | 값 |
+|------|-----|
+| Sync 방식 | automated (prune + selfHeal) |
+| 대상 | trip-service-prod 네임스페이스 |
+| ArgoCD 접속 | `http://<argocd-server-elb>` |
 
 ### SBOM 및 이미지 보안
 
@@ -378,7 +390,7 @@ aws ecr get-login-password --region ap-northeast-2 | \
 |------|------|----------|
 | 개발 | `dev-latest` | 로컬 빌드 |
 | 스테이징 | `staging-latest` | 로컬 빌드 |
-| 프로덕션 | `latest` | AWS ECR |
+| EKS 프로덕션 | `EKS-{BUILD_NUMBER}` | AWS ECR |
 
 ---
 

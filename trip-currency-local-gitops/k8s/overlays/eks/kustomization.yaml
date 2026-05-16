@@ -9,6 +9,7 @@ resources:
 - ingress.yaml
 - storageclass.yaml
 - external-secrets/
+- network-policies/
 
 patches:
 - target:
