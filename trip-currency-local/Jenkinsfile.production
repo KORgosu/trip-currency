@@ -175,13 +175,16 @@ pipeline {
                         def serviceName = svc
                         scanTasks["SBOM: ${serviceName}"] = {
                             def image = "${ECR_REGISTRY}/service-${serviceName}:${PROD_TAG}"
+                            def cacheDir = "/tmp/trivy-cache-${serviceName}"
                             sh """
                                 trivy image \
+                                    --cache-dir ${cacheDir} \
                                     --format cyclonedx \
                                     --output sbom-${serviceName}.json \
                                     ${image}
 
                                 trivy image \
+                                    --cache-dir ${cacheDir} \
                                     --exit-code 1 \
                                     --severity CRITICAL \
                                     --ignore-unfixed \
