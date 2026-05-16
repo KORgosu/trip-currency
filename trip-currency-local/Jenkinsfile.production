@@ -11,7 +11,7 @@ pipeline {
     environment {
         AWS_REGION = 'ap-northeast-2'
         ECR_REGISTRY = "${env.AWS_ACCOUNT_ID}.dkr.ecr.ap-northeast-2.amazonaws.com"
-        PROD_TAG = "prod-${env.BUILD_NUMBER}"
+        PROD_TAG = "EKS-${env.BUILD_NUMBER}"
         GITOPS_OVERLAY = 'k8s/overlays/eks'
         // 별도 GitOps 레포 clone 시 사용 (모노레포에 gitops 폴더가 없을 때)
         GITOPS_REPO_URL = 'https://github.com/KORgosu/trip-currency-local-gitops.git'
