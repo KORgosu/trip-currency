@@ -715,7 +715,7 @@ Slack webhook URL:
 감사 추적     없음               →  CloudTrail + EKS Audit + FluentBit
 위협 탐지     없음               →  GuardDuty (8개 기능) + AlertManager
 공급망 보안   없음               →  Trivy SBOM + ECR Enhanced Scanning
-````
+```
 
 ---
 
