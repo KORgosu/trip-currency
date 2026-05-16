@@ -1,3 +1,5 @@
+# EKS overlay: 이미지 레지스트리의 ${AWS_ACCOUNT_ID}는 Git에 실계정을 두지 않기 위한 플레이스홀더입니다.
+# 적용·렌더 전에 envsubst(또는 CI)로 실제 12자리 계정 ID로 치환하거나, Argo CD에서 이미지 경로를 별도로 보강하세요.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
@@ -18,7 +20,7 @@ patches:
   patch: |-
     - op: replace
       path: /spec/template/spec/containers/0/image
-      value: 716773066105.dkr.ecr.ap-northeast-2.amazonaws.com/service-frontend:EKS-9
+      value: ${AWS_ACCOUNT_ID}.dkr.ecr.ap-northeast-2.amazonaws.com/service-frontend:EKS-9
     - op: replace
       path: /spec/template/spec/containers/0/imagePullPolicy
       value: Always
@@ -29,7 +31,7 @@ patches:
   patch: |-
     - op: replace
       path: /spec/template/spec/containers/0/image
-      value: 716773066105.dkr.ecr.ap-northeast-2.amazonaws.com/service-currency:EKS-9
+      value: ${AWS_ACCOUNT_ID}.dkr.ecr.ap-northeast-2.amazonaws.com/service-currency:EKS-9
     - op: replace
       path: /spec/template/spec/containers/0/imagePullPolicy
       value: Always
@@ -40,7 +42,7 @@ patches:
   patch: |-
     - op: replace
       path: /spec/template/spec/containers/0/image
-      value: 716773066105.dkr.ecr.ap-northeast-2.amazonaws.com/service-history:EKS-9
+      value: ${AWS_ACCOUNT_ID}.dkr.ecr.ap-northeast-2.amazonaws.com/service-history:EKS-9
     - op: replace
       path: /spec/template/spec/containers/0/imagePullPolicy
       value: Always
@@ -51,7 +53,7 @@ patches:
   patch: |-
     - op: replace
       path: /spec/template/spec/containers/0/image
-      value: 716773066105.dkr.ecr.ap-northeast-2.amazonaws.com/service-ranking:EKS-9
+      value: ${AWS_ACCOUNT_ID}.dkr.ecr.ap-northeast-2.amazonaws.com/service-ranking:EKS-9
     - op: replace
       path: /spec/template/spec/containers/0/imagePullPolicy
       value: Always
@@ -62,7 +64,7 @@ patches:
   patch: |-
     - op: replace
       path: /spec/jobTemplate/spec/template/spec/containers/0/image
-      value: 716773066105.dkr.ecr.ap-northeast-2.amazonaws.com/service-dataingestor:EKS-9
+      value: ${AWS_ACCOUNT_ID}.dkr.ecr.ap-northeast-2.amazonaws.com/service-dataingestor:EKS-9
     - op: replace
       path: /spec/jobTemplate/spec/template/spec/containers/0/imagePullPolicy
       value: Always

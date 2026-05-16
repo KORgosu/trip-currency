@@ -37,7 +37,9 @@ Manage Jenkins → System → Global properties → Environment variables:
 
 | 변수명 | 값 |
 |-------|-----|
-| AWS_ACCOUNT_ID | 716773066105 |
+| AWS_ACCOUNT_ID | (Jenkins UI에만 설정 — 저장소에 커밋하지 않음) |
+
+> `worker-iam-policy.json`의 ECR ARN 계정 자리는 예시 `123456789012`입니다. 적용 전 본인 AWS 계정 ID로 바꿉니다.
 
 ---
 

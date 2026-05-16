@@ -294,7 +294,7 @@ GitHub (trip-currency-local-gitops main 브랜치 업데이트)
 
 | 환경 | 태그 형식 | 레지스트리 |
 |------|---------|----------|
-| EKS 프로덕션 | `EKS-{BUILD_NUMBER}` | AWS ECR (716773066105.dkr.ecr.ap-northeast-2.amazonaws.com) |
+| EKS 프로덕션 | `EKS-{BUILD_NUMBER}` | AWS ECR (`${AWS_ACCOUNT_ID}.dkr.ecr.ap-northeast-2.amazonaws.com`) |
 
 ### ArgoCD Application
 
@@ -767,7 +767,7 @@ aws secretsmanager put-secret-value \
 | `click_history` | 일별 클릭 이력 (daily reset 시 스냅샷) |
 | `ranking_results` | 기간별 랭킹 결과 upsert (period가 PK) |
 
-- **엔드포인트**: `trip-docdb-cluster.cluster-cxiuq4kag9i2.ap-northeast-2.docdb.amazonaws.com:27017`
+- **엔드포인트**: `trip-docdb-cluster.cluster-xxxxxxxxxx.ap-northeast-2.docdb.amazonaws.com:27017` (실제 클러스터 ID는 비공개)
 - **DB**: `currency_db` (MongoDB 호환 motor 드라이버 사용)
 - **일별 리셋**: 매일 자정 KST 스케줄러가 `country_clicks` 일별 카운터를 초기화하고 `click_history`에 스냅샷 저장
 

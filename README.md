@@ -12,6 +12,7 @@
 
 ### 1-1. 네트워크 격리 (NetworkPolicy)
 
+- **trip-currency\trip-currency-local-gitops\k8s\overlays\eks\network-policies** 에 위치
 - **엔진**: Calico Tigera Operator v3.29.1 (AmazonVPC 모드, policy-engine-only — VPC CNI 유지)
 - **기본 정책**: default-deny (모든 Ingress/Egress 차단 후 최소 권한만 허용)
 - **적용 정책 10개** (`trip-service-prod` 네임스페이스):
