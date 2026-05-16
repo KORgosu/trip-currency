@@ -50,3 +50,4 @@ env/
 .claude/
 \#*.txt
 jenkins-setup/keys/
+jenkins-setup/*.txt
