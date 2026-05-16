@@ -57,9 +57,9 @@ class MongoDBService:
             
             # 연결 문자열 구성
             if username and password:
-                connection_string = f"mongodb://{username}:{password}@{host}:{port}/{database}?authSource=admin"
+                connection_string = f"mongodb://{username}:{password}@{host}:{port}/{database}?authSource=admin&retryWrites=false"
             else:
-                connection_string = f"mongodb://{host}:{port}/{database}"
+                connection_string = f"mongodb://{host}:{port}/{database}?retryWrites=false"
             
             # MongoDB 클라이언트 생성
             self.client = AsyncIOMotorClient(

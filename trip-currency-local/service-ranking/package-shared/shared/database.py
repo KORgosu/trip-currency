@@ -212,7 +212,7 @@ class MongoDBHelper:
         """MongoDB 연결"""
         config = get_config()
         try:
-            connection_string = f"mongodb://{config.mongodb.user}:{config.mongodb.password}@{config.mongodb.host}:{config.mongodb.port}/?authSource=admin"
+            connection_string = f"mongodb://{config.mongodb.user}:{config.mongodb.password}@{config.mongodb.host}:{config.mongodb.port}/?authSource=admin&retryWrites=false"
             self.client = AsyncIOMotorClient(connection_string)
             self.db = self.client[self.database_name]
             
